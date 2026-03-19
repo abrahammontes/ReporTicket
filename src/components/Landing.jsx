@@ -1,7 +1,7 @@
 import React from 'react';
 import Logo from './Logo';
 
-const Landing = ({ onGetStarted, onLogin, onDemo, theme, t }) => {
+const Landing = ({ onGetStarted, onLogin, theme, t }) => {
   return (
     <div className="landing-page animate-in">
       <nav style={{ 
@@ -88,24 +88,14 @@ const Landing = ({ onGetStarted, onLogin, onDemo, theme, t }) => {
           marginBottom: '4rem',
           maxWidth: '800px',
           margin: '0 auto 4rem',
-          lineHeight: '1.6'
+          lineHeight: '1.6',
+          whiteSpace: 'pre-wrap'
         }}>
           {t('heroSub')}
         </p>
 
         <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onGetStarted} className="btn-primary" style={{ padding: '1rem 3rem', fontSize: '1.1rem' }}>
-            {t('getStarted')}
-          </button>
-          <button onClick={onDemo} className="glass-panel card-hover" style={{ 
-            padding: '1rem 3rem', 
-            fontSize: '1.1rem',
-            textAlign: 'center',
-            cursor: 'pointer',
-            fontWeight: '600'
-          }}>
-            {t('viewDemo')}
-          </button>
+          {/* Hero buttons removed per user request */}
         </div>
       </div>
 

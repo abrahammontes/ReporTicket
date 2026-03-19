@@ -93,31 +93,10 @@ function App() {
     }
   };
 
-  const handleDemo = () => {
-    const demoUser = {
-      id: 'demo-id',
-      name: 'Demo Principal',
-      email: 'demo@reporticket.com',
-      role: 'admin',
-      preferences: { theme: 'dark', language: 'es' },
-      photo: null
-    };
-    setCurrentUser(demoUser);
-    setUserRole('admin');
-    setTheme('dark');
-    setLanguage('es');
-    dbService.setSession(demoUser);
-    setView('dashboard');
-    // Ensure some mock tickets exist for the demo
-    const existing = dbService.getTickets();
-    if (existing.length === 0) {
-      dbService.updateTicket('TK-001', { subject: 'Bienvenido a ReporTicket', description: 'Este es un ticket de ejemplo para tu demo.', user: 'Cliente Demo', status: 'new', priority: 'high', date: '2026-03-19', department: 'support' });
-    }
-  };
 
   const renderView = () => {
     // Non-layout views
-    if (view === 'landing') return <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} onDemo={handleDemo} theme={theme} t={t} />;
+    if (view === 'landing') return <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} theme={theme} t={t} />;
     if (view === 'register') return <Register onLogin={handleRegister} onBack={() => handleViewChange('landing')} t={t} error={authError} />;
     if (view === 'login') return <Login onLogin={handleLogin} onRegister={() => handleViewChange('register')} onBack={() => handleViewChange('landing')} theme={theme} t={t} error={authError} />;
 
