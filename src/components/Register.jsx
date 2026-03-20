@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const Register = ({ onLogin, onBack, t, error }) => {
+const Register = ({ onRegister, onLogin, onBack, t, error }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,7 +17,7 @@ const Register = ({ onLogin, onBack, t, error }) => {
       setLocalError(t('captchaRequired'));
       return;
     }
-    onLogin({ name, email, password, phone, extension });
+    onRegister({ name, email, password, phone, extension });
   };
 
   return (
@@ -50,7 +50,7 @@ const Register = ({ onLogin, onBack, t, error }) => {
             fontWeight: '600'
           }}
         >
-          {t('cancel')}
+          {t('backToHome')}
         </button>
         
         <h2 style={{ fontSize: '1.75rem', fontWeight: '800', marginBottom: '0.5rem' }}>{t('createAccount')}</h2>

@@ -137,10 +137,42 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
             </div>
 
             {/* No soy un robot Checkbox */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem', background: isRobotChecked ? 'rgba(24, 193, 202, 0.05)' : 'rgba(255,255,255,0.02)', border: localError && !isRobotChecked ? '1px solid #ef4444' : '1px solid var(--border-color)', borderRadius: '0.85rem', cursor: 'pointer', userSelect: 'none', transition: 'var(--transition)' }}>
-  <input type="checkbox" checked={isRobotChecked} onChange={() => setIsRobotChecked(!isRobotChecked)} style={{ marginRight: '0.5rem' }} />
-  <span style={{ fontSize: '0.9rem', fontWeight: '600', color: localError && !isRobotChecked ? '#ef4444' : 'var(--text-main)' }}>{t('notARobot')}</span>
-</div>
+            <div 
+              onClick={() => setIsRobotChecked(!isRobotChecked)}
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '1rem', 
+                padding: '1rem', 
+                background: isRobotChecked ? 'rgba(24, 193, 202, 0.05)' : 'rgba(255,255,255,0.02)', 
+                border: localError && !isRobotChecked ? '1px solid #ef4444' : '1px solid var(--border-color)', 
+                borderRadius: '0.85rem',
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'var(--transition)'
+              }}
+            >
+              <div style={{ 
+                width: '24px', 
+                height: '24px', 
+                borderRadius: '6px',
+                border: isRobotChecked ? 'none' : '2px solid var(--border-color)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: isRobotChecked ? 'var(--primary)' : 'transparent',
+                transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                flexShrink: 0
+              }}>
+                {isRobotChecked && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+              </div>
+              <span style={{ fontSize: '0.9rem', fontWeight: '600', color: localError && !isRobotChecked ? '#ef4444' : 'var(--text-main)' }}>
+                {t('notARobot')}
+              </span>
+              <div style={{ marginLeft: 'auto', opacity: 0.5 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              </div>
+            </div>
 
             <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', padding: '1rem', height: '3.5rem' }}>
               {isRecovering ? t('resetPassword') : t('login')}
@@ -159,7 +191,7 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
                 onClick={onBack}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}
               >
-                {t('backToList')}
+                {t('backToHome')}
               </button>
               <button 
                 type="button"

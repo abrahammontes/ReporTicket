@@ -3,13 +3,15 @@ import React, { useState } from 'react';
 const AdminPanel = ({ stats, t, tickets, onSelectTicket }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterArea, setFilterArea] = useState('all');
 
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = ticket.subject.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          ticket.id.includes(searchTerm) || 
                          ticket.user.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || ticket.status === filterStatus;
-    return matchesSearch && matchesStatus;
+    const matchesArea = filterArea === 'all' || ticket.department === filterArea;
+    return matchesSearch && matchesStatus && matchesArea;
   });
 
   return (
@@ -37,6 +39,18 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket }) => {
               <option value="awaiting">{t('awaiting')}</option>
               <option value="old">{t('old')}</option>
               <option value="closed">{t('closed')}</option>
+            </select>
+            <select 
+              value={filterArea} 
+              onChange={(e) => setFilterArea(e.target.value)}
+              style={{ width: '150px' }}
+            >
+              <option value="all">{t('area')} (All)</option>
+              <option value="support">{t('support')}</option>
+              <option value="sales">{t('sales')}</option>
+              <option value="billing">{t('billing')}</option>
+              <option value="accounting">{t('accounting')}</option>
+              <option value="accountsPayable">{t('accountsPayable')}</option>
             </select>
           </div>
         </div>

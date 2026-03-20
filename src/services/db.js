@@ -72,9 +72,15 @@ export const dbService = {
   // Ticket Management
   getTickets: () => getDB().tickets,
   
-  addTicket: (ticket) => {
+  addTicket: (ticket, userName = 'Anonymous') => {
     const db = getDB();
-    const newTicket = { ...ticket, id: (Date.now() % 10000).toString(), date: new Date().toISOString().split('T')[0] };
+    const newTicket = { 
+      status: 'new',
+      user: userName,
+      ...ticket, 
+      id: (Date.now() % 10000).toString(), 
+      date: new Date().toISOString().split('T')[0] 
+    };
     db.tickets.unshift(newTicket);
     saveDB(db);
     return newTicket;

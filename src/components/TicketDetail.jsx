@@ -7,6 +7,8 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
     status: ticket.status === 'pending' ? 'inprogress' : (ticket.status || 'new')
   });
   const [newNote, setNewNote] = useState('');
+  const [attachments, setAttachments] = useState([]);
+  const fileInputRef = useRef(null);
   const [isInternal, setIsInternal] = useState(false);
   const [pendingUpdates, setPendingUpdates] = useState({});
   const [showSuccess, setShowSuccess] = useState(false);
@@ -109,12 +111,14 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
         id: Date.now(),
         text: newNote,
         type: isInternal ? 'internal' : 'public',
-        date: new Date().toLocaleString()
+        date: new Date().toLocaleString(),
+        attachments: attachments
       }]
     });
     if (updated) {
       setLocalTicket(updated);
       setNewNote('');
+      setAttachments([]);
       if (onUpdate) onUpdate();
     }
   };
@@ -146,6 +150,27 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
   const insertVariable = (variable) => {
     if (!variable) return;
     setNewNote(prev => prev + variable);
+  };
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    const allowedExtensions = ['jpg', 'png', 'pdf', 'doc', 'docx', 'tiff', 'xls', 'xlsx'];
+    
+    const validFiles = files.filter(file => {
+      const ext = file.name.split('.').pop().toLowerCase();
+      return allowedExtensions.includes(ext);
+    });
+
+    setAttachments(prev => [...prev, ...validFiles.map(f => ({
+      name: f.name,
+      size: (f.size / 1024).toFixed(1) + ' KB',
+      type: f.type,
+      id: Math.random().toString(36).substr(2, 9)
+    }))]);
+  };
+
+  const removeAttachment = (id) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
   const hasChanges = Object.keys(pendingUpdates).some(key => pendingUpdates[key] !== localTicket[key]);
@@ -191,12 +216,24 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
               <h2 style={{ fontSize: '1.75rem', fontWeight: '800', lineHeight: '1.2' }}>{localTicket.subject}</h2>
             </div>
             
-            <div style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
-              <p style={{ fontWeight: '700', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('originalMessage')}</p>
-              <p style={{ color: 'var(--text-main)', lineHeight: '1.7', fontSize: '1rem' }}>
-                {localTicket.description || t('noDescription')}
-              </p>
-            </div>
+            <p style={{ color: 'var(--text-main)', lineHeight: '1.7', fontSize: '1rem' }}>
+              {localTicket.description || t('noDescription')}
+            </p>
+
+            {/* Header Attachments */}
+            {localTicket.attachments && localTicket.attachments.length > 0 && (
+              <div style={{ marginTop: '1.5rem' }}>
+                <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>{t('attachments')}</p>
+                <div className="attachment-grid">
+                  {localTicket.attachments.map(file => (
+                    <a key={file.id} href="#" className="attachment-tag" onClick={(e) => e.preventDefault()}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                      {file.name} ({file.size})
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="activity-section">
@@ -214,7 +251,18 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                     </span>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{note.date}</span>
                   </div>
-                  <p style={{ fontSize: '0.95rem' }}>{note.text}</p>
+                  <p style={{ fontSize: '0.95rem', margin: 0 }}>{note.text}</p>
+                  
+                  {note.attachments && note.attachments.length > 0 && (
+                    <div className="attachment-grid" style={{ marginTop: '0.75rem' }}>
+                      {note.attachments.map(file => (
+                        <a key={file.id} href="#" className="attachment-tag" onClick={(e) => e.preventDefault()} style={{ background: 'rgba(255,255,255,0.03)' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                          {file.name}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -222,74 +270,74 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
             <div className="glass-panel" style={{ padding: '2rem', opacity: isRestricted ? 0.6 : 1, pointerEvents: isRestricted ? 'none' : 'auto' }}>
               <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>{t('postReply')}</h2>
 
-            {!isRestricted && (
-              <div style={{ 
-                display: 'flex', 
-                gap: '1rem', 
-                marginBottom: '1.25rem', 
-                padding: '0.75rem',
-                background: 'var(--glass-bg)',
-                borderRadius: '0.85rem',
-                border: '1px solid var(--border-color)',
-                alignItems: 'center'
-              }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '0.25rem', letterSpacing: '0.02em' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
-                    {t('quickResponses').toUpperCase()}
-                  </label>
-                  <select 
-                    onChange={(e) => { applyCannedResponse(e.target.value); e.target.value = ''; }}
-                    style={{ 
-                      width: '100%', 
-                      fontSize: '0.85rem', 
-                      padding: '0.5rem 2.25rem 0.5rem 0.75rem', 
-                      background: 'rgba(255,255,255,0.05) url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 0.75rem center', 
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '0.5rem',
-                      color: 'var(--text-color)',
-                      cursor: 'pointer',
-                      appearance: 'none',
-                      WebkitAppearance: 'none'
-                    }}
-                  >
-                    <option value="">{t('select')}...</option>
-                    <option value="responseGreeting">{t('variableUserName')}</option>
-                    <option value="responseClosing">{t('responseClosing')}</option>
-                    <option value="responseThankYou">{t('responseThankYou')}</option>
-                  </select>
-                </div>
+              {!isRestricted && (
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '1rem', 
+                  marginBottom: '1.25rem', 
+                  padding: '0.75rem',
+                  background: 'var(--glass-bg)',
+                  borderRadius: '0.85rem',
+                  border: '1px solid var(--border-color)',
+                  alignItems: 'center'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '0.25rem', letterSpacing: '0.02em' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                      {t('quickResponses').toUpperCase()}
+                    </label>
+                    <select 
+                      onChange={(e) => { applyCannedResponse(e.target.value); e.target.value = ''; }}
+                      style={{ 
+                        width: '100%', 
+                        fontSize: '0.85rem', 
+                        padding: '0.5rem 2.25rem 0.5rem 0.75rem', 
+                        background: 'rgba(255,255,255,0.05) url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 0.75rem center', 
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '0.5rem',
+                        color: 'var(--text-color)',
+                        cursor: 'pointer',
+                        appearance: 'none',
+                        WebkitAppearance: 'none'
+                      }}
+                    >
+                      <option value="">{t('select')}...</option>
+                      <option value="responseGreeting">{t('variableUserName')}</option>
+                      <option value="responseClosing">{t('responseClosing')}</option>
+                      <option value="responseThankYou">{t('responseThankYou')}</option>
+                    </select>
+                  </div>
 
-                <div style={{ height: '30px', width: '1px', background: 'var(--border-color)', marginTop: '1rem' }}></div>
+                  <div style={{ height: '30px', width: '1px', background: 'var(--border-color)', marginTop: '1rem' }}></div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '0.25rem', letterSpacing: '0.02em' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-                    {t('variables').toUpperCase()}
-                  </label>
-                  <select 
-                    onChange={(e) => { insertVariable(e.target.value); e.target.value = ''; }}
-                    style={{ 
-                      width: '100%', 
-                      fontSize: '0.85rem', 
-                      padding: '0.5rem 2.25rem 0.5rem 0.75rem', 
-                      background: 'rgba(255,255,255,0.05) url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 0.75rem center', 
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '0.5rem',
-                      color: 'var(--text-color)',
-                      cursor: 'pointer',
-                      appearance: 'none',
-                      WebkitAppearance: 'none'
-                    }}
-                  >
-                    <option value="">{t('select')}...</option>
-                    <option value={`[${localTicket.user}]`}>{t('variableUserName')}</option>
-                    <option value={`[#${localTicket.id}]`}>{t('variableTicketId')}</option>
-                    <option value={`[${new Date().toLocaleDateString()}]`}>{t('variableCurrentDate')}</option>
-                  </select>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '0.25rem', letterSpacing: '0.02em' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                      {t('variables').toUpperCase()}
+                    </label>
+                    <select 
+                      onChange={(e) => { insertVariable(e.target.value); e.target.value = ''; }}
+                      style={{ 
+                        width: '100%', 
+                        fontSize: '0.85rem', 
+                        padding: '0.5rem 2.25rem 0.5rem 0.75rem', 
+                        background: 'rgba(255,255,255,0.05) url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2.5\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 0.75rem center', 
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '0.5rem',
+                        color: 'var(--text-color)',
+                        cursor: 'pointer',
+                        appearance: 'none',
+                        WebkitAppearance: 'none'
+                      }}
+                    >
+                      <option value="">{t('select')}...</option>
+                      <option value={`[${localTicket.user}]`}>{t('variableUserName')}</option>
+                      <option value={`[#${localTicket.id}]`}>{t('variableTicketId')}</option>
+                      <option value={`[${new Date().toLocaleDateString()}]`}>{t('variableCurrentDate')}</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
               <textarea
                 ref={textareaRef}
@@ -299,13 +347,68 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 disabled={isRestricted}
                 style={{
                   minHeight: '120px',
-                  marginBottom: '0.5rem',
+                  marginBottom: '1rem',
                   resize: 'none',
                   width: '100%',
                   overflow: 'hidden',
                   lineHeight: '1.5'
                 }}
               />
+
+              {/* Reply Attachments Drop Zone */}
+              {!isRestricted && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <div 
+                    className="drop-zone"
+                    style={{ padding: '1rem', borderStyle: 'solid', borderWidth: '1px' }}
+                    onClick={() => fileInputRef.current.click()}
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }}
+                    onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-over'); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('drag-over');
+                      handleFileChange({ target: { files: e.dataTransfer.files } });
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                      <span style={{ fontSize: '0.85rem' }}>{t('attachFiles')}</span>
+                    </div>
+                    <input 
+                      type="file" 
+                      multiple 
+                      ref={fileInputRef} 
+                      style={{ display: 'none' }} 
+                      onChange={handleFileChange}
+                      accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.tiff,.xls,.xlsx"
+                    />
+                  </div>
+
+                  {attachments.length > 0 && (
+                    <div className="attachment-grid">
+                      {attachments.map(file => (
+                        <div key={file.id} className="attachment-item" style={{ padding: '0.4rem 0.75rem' }}>
+                          <span style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }}>{file.name}</span>
+                          <button 
+                            onClick={() => removeAttachment(file.id)}
+                            style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', padding: '0.2rem' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                   {newNote.trim().split(/\s+/).filter(Boolean).length} / 100 {t('words')}
@@ -410,6 +513,9 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 >
                   <option value="support">{t('departmentSupport')}</option>
                   <option value="sales">{t('departmentSales')}</option>
+                  <option value="billing">{t('departmentBilling')}</option>
+                  <option value="accounting">{t('departmentAccounting')}</option>
+                  <option value="accountsPayable">{t('departmentAccountsPayable')}</option>
                 </select>
               </div>
 
@@ -439,7 +545,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
           zIndex: 10000,
           padding: '1.5rem'
         }}>
-          <div className="glass-panel" style={{ maxWidth: '500px', width: '100%', padding: '2.5rem', border: '1px solid #f87171' }}>
+          <div className="glass-panel" style={{ maxWidth: '400px', width: '100%', padding: '2.5rem', border: '1px solid #f87171' }}>
             <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#f87171' }}>⚠️ {t('confirmClosure')}</h2>
             <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.95rem', lineHeight: '1.6' }}>
               {t('closeWarning')}

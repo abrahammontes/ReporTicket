@@ -97,7 +97,7 @@ function App() {
   const renderView = () => {
     // Non-layout views
     if (view === 'landing') return <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} theme={theme} t={t} />;
-    if (view === 'register') return <Register onLogin={handleRegister} onBack={() => handleViewChange('landing')} t={t} error={authError} />;
+    if (view === 'register') return <Register onRegister={handleRegister} onLogin={() => handleViewChange('login')} onBack={() => handleViewChange('landing')} t={t} error={authError} />;
     if (view === 'login') return <Login onLogin={handleLogin} onRegister={() => handleViewChange('register')} onBack={() => handleViewChange('landing')} theme={theme} t={t} error={authError} />;
 
     // Layout views
@@ -109,7 +109,12 @@ function App() {
     } else if (view === 'detail') {
       content = <TicketDetail ticket={selectedTicket} onBack={() => handleViewChange('tickets')} t={t} onUpdate={() => setTickets(dbService.getTickets())} userRole={userRole} user={currentUser} />;
     } else if (view === 'new') {
-      content = <NewTicket onCancel={() => handleViewChange('dashboard')} onSubmit={() => handleViewChange('dashboard')} t={t} />;
+      const handleNewTicket = (ticketData) => {
+        dbService.addTicket(ticketData, currentUser?.name || 'User');
+        setTickets(dbService.getTickets());
+        handleViewChange('dashboard');
+      };
+      content = <NewTicket onCancel={() => handleViewChange('dashboard')} onSubmit={handleNewTicket} t={t} />;
     } else if (view === 'profile') {
       content = <Profile user={currentUser} t={t} onUpdate={setCurrentUser} />;
     } else if (view === 'user-guide') {
