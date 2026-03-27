@@ -232,7 +232,10 @@ export const translations = {
     dbModeSingle: "Single Database (Shared)",
     dbModeMulti: "Multi-Database (Isolated)",
     testDBConnection: "Test DB Connection",
-    saveDBConfig: "Save DB Configuration"
+    saveDBConfig: "Save DB Configuration",
+    settingsDesc: "Configure global system parameters, including mail servers and database connections.",
+    usersAndCompaniesDesc: "Manage the directory of authorized users and the companies they belong to.",
+    usersAndCompanies: "Users & Companies"
   },
   es: {
     dashboard: "Panel de Usuario",
@@ -456,6 +459,9 @@ export const translations = {
     "roles.supervisor": "Supervisor",
     "roles.admin": "Administrador",
     "roles.superadmin": "Super Administrador",
+    settingsDesc: "Configura los parámetros globales del sistema, incluyendo servidores de correo y conexiones a bases de datos.",
+    usersAndCompaniesDesc: "Gestiona el directorio de usuarios autorizados y las empresas a las que pertenecen.",
+    usersAndCompanies: "Usuarios y Empresas",
     manageInfrastructure: "Gestión de Infraestructura y Bases de Datos",
     dbMode: "Modo de Base de Datos",
     dbConfig: "Configuración de Base de Datos",
