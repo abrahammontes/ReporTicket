@@ -4,8 +4,13 @@ import cors from 'cors';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -779,7 +784,7 @@ app.post('/api/settings', async (req, res) => {
   res.json({ success: true, message: 'Settings saved (mock)' });
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
   
@@ -794,4 +799,10 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.log('Using environment variables for Database Configuration.');
   }
+});
+
+// Serve React frontend (must be after all API routes)
+app.use(express.static(path.join(__dirname, 'dist')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });

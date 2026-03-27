@@ -81,7 +81,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
     setTestConnectionStatus('testing');
     
     try {
-      const response = await fetch('http://localhost:3001/api/send-test-email', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/send-test-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
