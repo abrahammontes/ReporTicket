@@ -174,7 +174,7 @@ function App() {
             background: 'black'
           }}>
             <iframe
-              src="https://www.youtube.com/embed/TqRjQswjWCs?autoplay=1&mute=1&loop=1&controls=0&showinfo=0&autohide=1&playlist=TqRjQswjWCs&background=1&playsinline=1&rel=0"
+              src="https://www.youtube.com/embed/TqRjQswjWCs?autoplay=1&mute=1&loop=1&controls=0&showinfo=0&autohide=1&playlist=TqRjQswjWCs&background=1&playsinline=1&rel=0&vq=small"
               frameBorder="0"
               allow="autoplay; encrypted-media"
               style={{
@@ -185,8 +185,10 @@ function App() {
                 height: '100vh',
                 minWidth: '100vw',
                 minHeight: '56.25vw',
-                transform: 'translate(-50%, -50%)',
-                opacity: 0.6
+                transform: 'translate(-50%, -50%) scale(1.1)',
+                opacity: 0.4,
+                filter: 'blur(12px) brightness(0.8)',
+                pointerEvents: 'none'
               }}
             ></iframe>
             <div style={{
@@ -195,7 +197,8 @@ function App() {
               left: 0,
               width: '100%',
               height: '100%',
-              background: 'linear-gradient(rgba(8, 9, 10, 0.4) 0%, rgba(8, 9, 10, 0.8) 100%)',
+              background: 'radial-gradient(circle at 50% 50%, rgba(8, 9, 10, 0.2) 0%, rgba(8, 9, 10, 0.8) 100%), rgba(8, 9, 10, 0.3)',
+              backdropFilter: 'blur(1px)', // subtle bokeh micro-texture
               zIndex: 1
             }}></div>
           </div>
