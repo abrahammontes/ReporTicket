@@ -42,7 +42,10 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
 
   useEffect(() => {
     if (user?.role === 'superadmin') {
-      dbService.getUsers().then(setUsers);
+      dbService.getUsers().then(data => {
+        // Map company_id to companyId for frontend consistency
+        setUsers(data.map(u => ({ ...u, companyId: u.company_id })));
+      });
       dbService.getCompanies().then(setCompanies);
       dbService.getSystemInfo().then(info => {
         setSystemInfo(info);
@@ -158,11 +161,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
     }
   };
 
-  const handleUpdateUserCompany = async (userId, companyId) => {
-    await dbService.updateUserProfile(userId, { companyId });
-    const updated = await dbService.getUsers();
-    setUsers(updated);
-  };
+  // Removed handleUpdateUserCompany as it's now part of the edit save flow
 
   const handleEditCompanyStart = (company) => {
     setEditingCompanyId(company.id);
@@ -190,14 +189,18 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
 
   const handleEditUserStart = (u) => {
     setEditingUserId(u.id);
-    setEditUserForm({ name: u.name, role: u.role });
+    setEditUserForm({ name: u.name, role: u.role, companyId: u.companyId || '' });
   };
 
   const handleEditUserSave = async (userId) => {
     if (editUserForm.name.trim()) {
-      await dbService.updateUserProfile(userId, { name: editUserForm.name.trim(), role: editUserForm.role });
-      const updated = await dbService.getUsers();
-      setUsers(updated);
+      await dbService.updateUserProfile(userId, { 
+        name: editUserForm.name.trim(), 
+        role: editUserForm.role,
+        companyId: editUserForm.companyId
+      });
+      const data = await dbService.getUsers();
+      setUsers(data.map(u => ({ ...u, companyId: u.company_id })));
     }
     setEditingUserId(null);
   };
@@ -624,6 +627,18 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
                               <option value="superadmin">{t('roles.superadmin')}</option>
                             </select>
                           </td>
+                          <td style={{ padding: '1rem' }}>
+                            <select 
+                              value={editUserForm.companyId || ''} 
+                              onChange={(e) => setEditUserForm(f => ({...f, companyId: e.target.value}))}
+                              style={{ padding: '0.4rem', width: '100%' }}
+                            >
+                              <option value="">-- {t('unassigned') || 'Sin Asignar'} --</option>
+                              {companies.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          </td>
                         </>
                       ) : (
                         <>
@@ -631,29 +646,20 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
                           <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{u.email}</td>
                           <td style={{ padding: '1rem' }}>
                             <span className={`badge badge-${u.role === 'superadmin' ? 'closed' : (u.role === 'admin' ? 'old' : (u.role === 'supervisor' ? 'inprogress' : 'open'))}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>
-                          {t(`roles.${u.role}`)}
-                        </span>
+                              {t(`roles.${u.role}`)}
+                            </span>
+                          </td>
+                          <td style={{ padding: '1rem' }}>
+                            {u.role === 'superadmin' ? (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>N/A (Multi-Empresa)</span>
+                            ) : (
+                              <span style={{ fontSize: '0.9rem' }}>
+                                {companies.find(c => String(c.id) === String(u.companyId))?.name || (t('unassigned') || 'Sin Asignar')}
+                              </span>
+                            )}
                           </td>
                         </>
                       )}
-                      
-                      <td style={{ padding: '1rem' }}>
-                        {u.role === 'superadmin' ? (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>N/A (Multi-Empresa)</span>
-                        ) : (
-                          <select 
-                            value={u.companyId || ''} 
-                            onChange={(e) => handleUpdateUserCompany(u.id, e.target.value)}
-                            style={{ padding: '0.5rem', minWidth: '200px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', color: 'var(--text-main)' }}
-                            disabled={editingUserId === u.id}
-                          >
-                            <option value="">-- {t('unassigned') || 'Sin Asignar'} --</option>
-                            {companies.map(c => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
 
                       <td style={{ padding: '1rem' }}>
                         {editingUserId === u.id ? (

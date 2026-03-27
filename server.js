@@ -692,7 +692,7 @@ app.get('/api/global-users', async (req, res) => {
 
 // Company User Management
 app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
-  const { name, role, permissions, phone, extension } = req.body;
+  const { name, role, permissions, phone, extension, companyId } = req.body;
   try {
     const updates = [];
     const params = [];
@@ -701,6 +701,10 @@ app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
     if (permissions) { updates.push('permissions = ?'); params.push(JSON.stringify(permissions)); }
     if (phone) { updates.push('phone = ?'); params.push(phone); }
     if (extension) { updates.push('extension = ?'); params.push(extension); }
+    if (companyId !== undefined) { 
+      updates.push('company_id = ?'); 
+      params.push(companyId === '' ? null : companyId); 
+    }
     
     if (updates.length > 0) {
       params.push(req.params.id);
@@ -711,12 +715,22 @@ app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
       
       await req.db.execute(query, params);
       
-      // Sync role/name in global_directory if changed
-      if (role) {
-        await masterPool.execute('UPDATE global_directory SET role = ? WHERE user_id = ?', [role, req.params.id]);
+      // Sync in global_directory
+      const globalUpdates = [];
+      const globalParams = [];
+      if (role) { globalUpdates.push('role = ?'); globalParams.push(role); }
+      if (name) { globalUpdates.push('name = ?'); globalParams.push(name); }
+      if (companyId !== undefined) { 
+        globalUpdates.push('company_id = ?'); 
+        globalParams.push(companyId === '' ? null : companyId); 
+      }
+      
+      if (globalUpdates.length > 0) {
+        globalParams.push(req.params.id);
+        await masterPool.execute(`UPDATE global_directory SET ${globalUpdates.join(', ')} WHERE user_id = ?`, globalParams);
       }
     }
-    res.json({ success: true, message: 'User updated' });
+    res.json({ success: true, message: 'User updated successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
