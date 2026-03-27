@@ -778,10 +778,29 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
 });
 
 // System Settings
+app.get('/api/settings', async (req, res) => {
+  try {
+    const settings = await getSystemSettings();
+    res.json({ success: true, settings });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 app.post('/api/settings', async (req, res) => {
-  // For now, settings could be stored in masterPool system_settings table
-  // This is a placeholder for the logic
-  res.json({ success: true, message: 'Settings saved (mock)' });
+  try {
+    const settings = req.body;
+    // We store the whole body as 'smtpConfig' if it looks like SMTP settings, 
+    // or we can be more generic. For now, let's treat it as smtpConfig for simplicity
+    const configJson = JSON.stringify(settings);
+    await masterPool.execute(
+      'INSERT INTO global_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
+      ['smtpConfig', configJson, configJson]
+    );
+    res.json({ success: true, message: 'Settings saved successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 3001;

@@ -163,6 +163,14 @@ export const dbService = {
   },
 
   // System Settings
+  getSystemSettings: async () => {
+    const response = await fetch(`${API_URL}/settings`, {
+      headers: getHeaders()
+    });
+    const data = await response.json();
+    return data.settings || {};
+  },
+
   updateSystemSettings: async (settings) => {
     const response = await fetch(`${API_URL}/settings`, {
       method: 'POST',

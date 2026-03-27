@@ -54,6 +54,12 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
           user: info.dbUser || 'root'
         }));
       });
+      // Load SMTP Settings
+      dbService.getSystemSettings().then(settings => {
+        if (settings.smtpConfig) {
+          setSettingsForm(settings.smtpConfig);
+        }
+      });
     }
   }, [user]);
 
@@ -76,7 +82,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
     }
   };
 
-  const handleSaveSettings = async (e) => {
+  const handleTestSmtp = async (e) => {
     e.preventDefault();
     setTestConnectionStatus('testing');
     
@@ -95,12 +101,8 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
       const data = await response.json();
 
       if (data.success) {
-        setTestConnectionStatus('sending');
-        setTimeout(() => {
-          dbService.updateSystemSettings(settingsForm);
-          setTestConnectionStatus('success');
-          setTimeout(() => setTestConnectionStatus(null), 4000);
-        }, 1000);
+        setTestConnectionStatus('success');
+        setTimeout(() => setTestConnectionStatus(null), 4000);
       } else {
         setTestConnectionStatus('error');
         console.error('SMTP Test Error:', data.message);
@@ -110,6 +112,19 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
       setTestConnectionStatus('error');
       console.error('Fetch Error:', error);
       setTimeout(() => setTestConnectionStatus(null), 5000);
+    }
+  };
+
+  const handlePersistSmtp = async () => {
+    try {
+      const result = await dbService.updateSystemSettings(settingsForm);
+      if (result.success) {
+        alert(t('changesSaved'));
+      } else {
+        alert('Error: ' + result.message);
+      }
+    } catch (err) {
+      alert('Error saving SMTP settings');
     }
   };
 
@@ -393,11 +408,25 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
               />
             </div>
 
-            <button type="submit" className="btn-primary" style={{ marginTop: '1rem', padding: '1rem' }} disabled={testConnectionStatus === 'testing' || testConnectionStatus === 'sending'}>
-              {testConnectionStatus === 'testing' ? t('connectionTesting') : 
-               testConnectionStatus === 'sending' ? t('sendingConfirmationEmail') : 
-               t('testConnection')}
-            </button>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={handleTestSmtp}
+                style={{ flex: 1, padding: '1rem' }} 
+                disabled={testConnectionStatus === 'testing' || !testEmail}
+              >
+                {testConnectionStatus === 'testing' ? t('connectionTesting') : t('testConnection')}
+              </button>
+              <button 
+                type="button" 
+                onClick={handlePersistSmtp} 
+                className="btn-primary" 
+                style={{ flex: 1, padding: '1rem' }}
+              >
+                {t('save')}
+              </button>
+            </div>
           </form>
 
           <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '2rem 0' }} />
