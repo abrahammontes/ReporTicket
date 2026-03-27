@@ -4,6 +4,7 @@ import Logo from './Logo';
 const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
   const [recoverySent, setRecoverySent] = useState(false);
   const [isRobotChecked, setIsRobotChecked] = useState(false);
@@ -18,7 +19,7 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
       setLocalError(t('captchaRequired'));
       return;
     }
-    
+
     if (isRecovering) {
       setRecoverySent(true);
       setTimeout(() => {
@@ -31,17 +32,17 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
   };
 
   return (
-    <div className="login-view" style={{ 
-      minHeight: '100vh', 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
+    <div className="login-view" style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
       padding: '2rem',
       background: 'radial-gradient(circle at top right, var(--grad-start), var(--grad-end))'
     }}>
-      <div className={`glass-panel ${localError ? 'shake' : ''}`} style={{ 
-        width: '100%', 
-        maxWidth: '450px', 
+      <div className={`glass-panel ${localError ? 'shake' : ''}`} style={{
+        width: '100%',
+        maxWidth: '450px',
         padding: '3rem',
         animation: localError ? 'none' : 'fadeIn 0.5s ease-out'
       }}>
@@ -53,19 +54,19 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
         </div>
 
         {recoverySent ? (
-          <div style={{ 
-            textAlign: 'center', 
-            padding: '3rem 2rem', 
-            background: 'rgba(24, 193, 202, 0.05)', 
+          <div style={{
+            textAlign: 'center',
+            padding: '3rem 2rem',
+            background: 'rgba(24, 193, 202, 0.05)',
             borderRadius: '1.25rem',
             border: '1px solid var(--border-color)',
             animation: 'fadeInUp 0.6s var(--ease-premium)'
           }}>
-            <div style={{ 
-              width: '80px', 
-              height: '80px', 
-              borderRadius: '50%', 
-              background: 'rgba(24, 193, 202, 0.1)', 
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              background: 'rgba(24, 193, 202, 0.1)',
               color: 'var(--primary)',
               display: 'flex',
               alignItems: 'center',
@@ -80,12 +81,12 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             {(error || localError) && (
-              <div style={{ 
-                padding: '1rem', 
-                background: 'rgba(239, 68, 68, 0.08)', 
-                border: '1px solid rgba(239, 68, 68, 0.2)', 
-                borderRadius: '0.75rem', 
-                color: '#f87171', 
+              <div style={{
+                padding: '1rem',
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '0.75rem',
+                color: '#f87171',
                 fontSize: '0.85rem',
                 fontWeight: '600',
                 display: 'flex',
@@ -100,9 +101,9 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
               <label style={{ display: 'block', marginBottom: '0.65rem', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 {t('emailAddress')}
               </label>
-              <input 
-                type="email" 
-                required 
+              <input
+                type="email"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nombre@empresa.com"
@@ -115,46 +116,74 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
                 <label style={{ display: 'block', marginBottom: '0.65rem', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {t('password')}
                 </label>
-                <input 
-                  type="password" 
-                  required 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    style={{ paddingRight: '2.5rem', width: '100%' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '0.85rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: '0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title={showPassword ? "Ocultar Contraseña" : "Mostrar Contraseña"}
+                  >
+                    {showPassword ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    )}
+                  </button>
+                </div>
               </div>
             )}
 
             {/* Honeypot Field */}
             <div style={{ display: 'none' }}>
-              <input 
-                type="text" 
-                value={honeypot} 
-                onChange={(e) => setHoneypot(e.target.value)} 
-                tabIndex="-1" 
-                autoComplete="off" 
+              <input
+                type="text"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex="-1"
+                autoComplete="off"
               />
             </div>
 
             {/* No soy un robot Checkbox */}
-            <div 
+            <div
               onClick={() => setIsRobotChecked(!isRobotChecked)}
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '1rem', 
-                padding: '1rem', 
-                background: isRobotChecked ? 'rgba(24, 193, 202, 0.05)' : 'rgba(255,255,255,0.02)', 
-                border: localError && !isRobotChecked ? '1px solid #ef4444' : '1px solid var(--border-color)', 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                padding: '1rem',
+                background: isRobotChecked ? 'rgba(24, 193, 202, 0.05)' : 'rgba(255,255,255,0.02)',
+                border: localError && !isRobotChecked ? '1px solid #ef4444' : '1px solid var(--border-color)',
                 borderRadius: '0.85rem',
                 cursor: 'pointer',
                 userSelect: 'none',
                 transition: 'var(--transition)'
               }}
             >
-              <div style={{ 
-                width: '24px', 
-                height: '24px', 
+              <div style={{
+                width: '24px',
+                height: '24px',
                 borderRadius: '6px',
                 border: isRobotChecked ? 'none' : '2px solid var(--border-color)',
                 display: 'flex',
@@ -179,21 +208,21 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
             </button>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem', alignItems: 'center' }}>
-              <button 
+              <button
                 type="button"
                 onClick={() => setIsRecovering(!isRecovering)}
                 style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '700', padding: '0' }}
               >
                 {isRecovering ? t('backToLogin') : t('forgotPassword')}
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={onBack}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}
               >
                 {t('backToHome')}
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={onRegister}
                 style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}

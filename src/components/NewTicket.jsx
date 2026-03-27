@@ -1,12 +1,12 @@
 import React from 'react';
 
-const NewTicket = ({ onCancel, onSubmit, t }) => {
+const NewTicket = ({ onCancel, onSubmit, t, user }) => {
   const [formData, setFormData] = React.useState({
     subject: '',
     department: 'support',
     description: '',
-    name: '',
-    email: ''
+    name: user?.name || '',
+    email: user?.email || ''
   });
   const [attachments, setAttachments] = React.useState([]);
   const fileInputRef = React.useRef(null);
@@ -48,7 +48,8 @@ const NewTicket = ({ onCancel, onSubmit, t }) => {
               type="text" 
               placeholder={t('yourName')} 
               value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              disabled
+              style={{ background: 'rgba(255,255,255,0.05)', cursor: 'not-allowed', opacity: 0.7 }}
             />
           </div>
           <div>
@@ -57,7 +58,8 @@ const NewTicket = ({ onCancel, onSubmit, t }) => {
               type="email" 
               placeholder={t('emailAddress')} 
               value={formData.email}
-              onChange={(e) => setFormData({...formData, email: e.target.value})}
+              disabled
+              style={{ background: 'rgba(255,255,255,0.05)', cursor: 'not-allowed', opacity: 0.7 }}
             />
           </div>
         </div>

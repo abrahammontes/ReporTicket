@@ -10,6 +10,7 @@ export const translations = {
     unassigned: "Unassigned",
     totalClosed: "Total Closed",
     recentActivity: "Recent Activity",
+    viewAll: "View All",
     activeTickets: "Active Tickets",
     dashboardDesc: "Manage your support requests, track active ticket status, and stay updated with the latest activity.",
     ticketsDesc: "Complete list of tickets. Use filters and search to locate, assign, and manage user requests.",
@@ -153,7 +154,14 @@ export const translations = {
     allowedFormats: "Supported: jpg, png, pdf, doc, docx, tiff, xls, xlsx",
     dropFiles: "Drag files here or click to browse",
     removeFile: "Remove file",
-    attachments: "Attachments"
+    attachments: "Attachments",
+    usersAndCompanies: "Users & Companies",
+    usersAndCompaniesDesc: "Manage all system users and registered companies",
+    createCompany: "Create Company",
+    companyName: "Company Name",
+    create: "Create",
+    manageUsers: "Manage Users",
+    company: "Company"
   },
   es: {
     dashboard: "Panel de Usuario",
@@ -166,6 +174,7 @@ export const translations = {
     unassigned: "Sin Asignar",
     totalClosed: "Total Cerrados",
     recentActivity: "Actividad Reciente",
+    viewAll: "Ver Todo",
     activeTickets: "Tickets Activos",
     dashboardDesc: "Gestiona tus solicitudes de soporte, revisa el estado de tus tickets activos y mantente al tanto de las últimas actualizaciones.",
     ticketsDesc: "Listado completo de tickets. Utiliza los filtros y el buscador para localizar, asignar y gestionar las solicitudes de los usuarios.",
@@ -308,6 +317,13 @@ export const translations = {
     allowedFormats: "Formatos permitidos: jpg, png, pdf, doc, docx, tiff, xls, xlsx",
     dropFiles: "Arrastra los archivos aquí o haz clic para buscar",
     removeFile: "Eliminar archivo",
-    attachments: "Archivos Adjuntos"
+    attachments: "Archivos Adjuntos",
+    usersAndCompanies: "Usuarios y Empresas",
+    usersAndCompaniesDesc: "Gestiona todos los usuarios del sistema y las empresas registradas",
+    createCompany: "Crear Empresa",
+    companyName: "Nombre de la Empresa",
+    create: "Crear",
+    manageUsers: "Gestión de Usuarios",
+    company: "Empresa"
   }
 };

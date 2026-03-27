@@ -18,9 +18,22 @@ function App() {
   const [view, setView] = useState(initialUser ? 'dashboard' : 'landing');
   const [language, setLanguage] = useState(initialUser?.preferences?.language || 'es');
   const [theme, setTheme] = useState(initialUser?.preferences?.theme || 'dark');
-  const [tickets, setTickets] = useState(dbService.getTickets() || []);
+  const [allTickets, setAllTickets] = useState(dbService.getTickets() || []);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [userRole, setUserRole] = useState(initialUser?.role || 'customer');
+  
+  const visibleTickets = React.useMemo(() => {
+    if (!currentUser) return [];
+    if (userRole === 'superadmin') return allTickets;
+    
+    if (currentUser.permissions?.viewAllTickets) {
+      const users = dbService.getUsers();
+      const companyUserNames = users.filter(u => u.companyId === currentUser.companyId).map(u => u.name);
+      return allTickets.filter(t => companyUserNames.includes(t.user) || t.user === currentUser.name);
+    }
+    
+    return allTickets.filter(t => t.user === currentUser.name);
+  }, [allTickets, currentUser, userRole]);
   const [authError, setAuthError] = useState(null);
 
   const t = (key) => (translations[language] && translations[language][key]) || key;
@@ -39,7 +52,7 @@ function App() {
 
   // Calculate real stats from tickets
   useEffect(() => {
-    const currentTickets = tickets || [];
+    const currentTickets = visibleTickets || [];
     const s = {
       open: currentTickets.filter(t => t.status !== 'closed').length,
       overdue: currentTickets.filter(t => t.status === 'old').length,
@@ -47,7 +60,7 @@ function App() {
       closed: currentTickets.filter(t => t.status === 'closed').length
     };
     setStats(s);
-  }, [tickets]);
+  }, [visibleTickets]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -103,24 +116,26 @@ function App() {
     // Layout views
     let content;
     if (view === 'dashboard') {
-      content = <Dashboard stats={stats} t={t} tickets={tickets} onSelectTicket={handleTicketClick} />;
+      content = <Dashboard stats={stats} t={t} tickets={visibleTickets} onSelectTicket={handleTicketClick} />;
     } else if (view === 'tickets') {
-      content = <AdminPanel stats={stats} t={t} tickets={tickets} onSelectTicket={handleTicketClick} />;
+      content = <AdminPanel stats={stats} t={t} tickets={visibleTickets} onSelectTicket={handleTicketClick} user={currentUser} activeTab="tickets" />;
+    } else if (view === 'usersAndCompanies') {
+      content = <AdminPanel stats={stats} t={t} tickets={visibleTickets} onSelectTicket={handleTicketClick} user={currentUser} activeTab="users" />;
     } else if (view === 'detail') {
-      content = <TicketDetail ticket={selectedTicket} onBack={() => handleViewChange('tickets')} t={t} onUpdate={() => setTickets(dbService.getTickets())} userRole={userRole} user={currentUser} />;
+      content = <TicketDetail ticket={selectedTicket} onBack={() => handleViewChange('tickets')} t={t} onUpdate={() => setAllTickets(dbService.getTickets())} userRole={userRole} user={currentUser} />;
     } else if (view === 'new') {
       const handleNewTicket = (ticketData) => {
         dbService.addTicket(ticketData, currentUser?.name || 'User');
-        setTickets(dbService.getTickets());
+        setAllTickets(dbService.getTickets());
         handleViewChange('dashboard');
       };
-      content = <NewTicket onCancel={() => handleViewChange('dashboard')} onSubmit={handleNewTicket} t={t} />;
+      content = <NewTicket onCancel={() => handleViewChange('dashboard')} onSubmit={handleNewTicket} t={t} user={currentUser} />;
     } else if (view === 'profile') {
       content = <Profile user={currentUser} t={t} onUpdate={setCurrentUser} />;
     } else if (view === 'user-guide') {
       content = <UserGuide t={t} language={language} />;
     } else {
-      content = <Dashboard stats={stats} t={t} tickets={tickets} onSelectTicket={handleTicketClick} />;
+      content = <Dashboard stats={stats} t={t} tickets={visibleTickets} onSelectTicket={handleTicketClick} />;
     }
 
     return (
