@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import Logo from './Logo';
+import { dbService } from '../services/db';
 
-const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
+const Login = ({ onLogin, onRegister, onBack, theme, t, error, successMsg }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -10,8 +11,9 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
   const [isRobotChecked, setIsRobotChecked] = useState(false);
   const [honeypot, setHoneypot] = useState('');
   const [localError, setLocalError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLocalError(null);
     if (honeypot) return; // Silent fail for bots
@@ -20,14 +22,19 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
       return;
     }
 
-    if (isRecovering) {
-      setRecoverySent(true);
-      setTimeout(() => {
-        setRecoverySent(false);
-        setIsRecovering(false);
-      }, 3000);
-    } else {
-      onLogin(email, password);
+    setIsLoading(true);
+    try {
+      if (isRecovering) {
+        await dbService.forgotPassword(email);
+        setRecoverySent(true);
+        setLocalError(null);
+      } else {
+        await onLogin(email, password);
+      }
+    } catch (err) {
+      setLocalError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -38,14 +45,35 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '2rem',
-      background: 'radial-gradient(circle at top right, var(--grad-start), var(--grad-end))'
+      background: 'transparent'
     }}>
       <div className={`glass-panel ${localError ? 'shake' : ''}`} style={{
         width: '100%',
-        maxWidth: '450px',
-        padding: '3rem',
+        maxWidth: '420px',
+        padding: '2rem',
         animation: localError ? 'none' : 'fadeIn 0.5s ease-out'
       }}>
+        <button 
+          onClick={onBack} 
+          className="card-hover"
+          style={{ 
+            background: 'rgba(255,255,255,0.05)', 
+            border: '1px solid var(--border-color)', 
+            color: 'var(--text-muted)', 
+            cursor: 'pointer', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '0.5rem',
+            padding: '0.6rem 1.25rem',
+            borderRadius: '0.85rem',
+            fontSize: '0.85rem',
+            fontWeight: '600',
+            marginBottom: '2rem'
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          {t('backToHome')}
+        </button>
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
           <Logo theme={theme} size={160} />
           <h2 style={{ marginTop: '1.5rem', fontSize: '1.5rem' }}>
@@ -73,10 +101,10 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
               justifyContent: 'center',
               margin: '0 auto 2rem'
             }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             </div>
-            <h3 style={{ marginBottom: '1rem' }}>{t('emailSent') || 'Email Enviado'}</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: '1.6' }}>{t('resetLinkSent')}</p>
+            <h3 style={{ marginBottom: '1rem' }}>{t('passwordResetSuccess')}</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: '1.6' }}>{t('passwordResetSuccessDesc')}</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -97,6 +125,23 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
                 {error || localError}
               </div>
             )}
+            {successMsg && (
+              <div style={{
+                padding: '1rem',
+                background: 'rgba(34, 197, 94, 0.08)',
+                border: '1px solid rgba(34, 197, 94, 0.2)',
+                borderRadius: '0.75rem',
+                color: '#4ade80',
+                fontSize: '0.85rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                {successMsg}
+              </div>
+            )}
             <div>
               <label style={{ display: 'block', marginBottom: '0.65rem', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 {t('emailAddress')}
@@ -106,7 +151,7 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="nombre@empresa.com"
+                placeholder={t('enterEmailPlaceholder')}
                 autoFocus
               />
             </div>
@@ -117,41 +162,42 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
                   {t('password')}
                 </label>
                 <div style={{ position: 'relative' }}>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    style={{ paddingRight: '2.5rem', width: '100%' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '0.85rem',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      padding: '0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                    title={showPassword ? "Ocultar Contraseña" : "Mostrar Contraseña"}
-                  >
-                    {showPassword ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                    ) : (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                    )}
-                  </button>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      minLength="8"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      style={{ paddingRight: '2.5rem', width: '100%' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '0.85rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title={showPassword ? t('hidePassword') : t('showPassword')}
+                    >
+                      {showPassword ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
             )}
 
             {/* Honeypot Field */}
@@ -203,8 +249,13 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
               </div>
             </div>
 
-            <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', padding: '1rem', height: '3.5rem' }}>
-              {isRecovering ? t('resetPassword') : t('login')}
+            <button 
+              type="submit" 
+              className="btn-primary" 
+              style={{ marginTop: '0.5rem', padding: '1rem', height: '3.5rem' }}
+              disabled={isLoading}
+            >
+              {isLoading ? '...' : (isRecovering ? t('sendRecoveryEmail') || 'Enviar Correo' : t('login'))}
             </button>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem', alignItems: 'center' }}>
@@ -214,13 +265,6 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error }) => {
                 style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '700', padding: '0' }}
               >
                 {isRecovering ? t('backToLogin') : t('forgotPassword')}
-              </button>
-              <button
-                type="button"
-                onClick={onBack}
-                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}
-              >
-                {t('backToHome')}
               </button>
               <button
                 type="button"

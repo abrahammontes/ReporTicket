@@ -51,8 +51,7 @@
 
 body {
   min-height: 100vh;
-  background: radial-gradient(circle at top right, var(--grad-start), var(--grad-end));
-  background-attachment: fixed;
+  background: #08090a; /* Fallback solid color */
   color: var(--text-main);
   transition: background 0.5s var(--ease-premium), color 0.5s var(--ease-premium);
   overflow-x: hidden;
@@ -102,12 +101,12 @@ body {
 }
 
 .sidebar {
-  width: 280px;
+  width: 260px;
   height: 100vh;
   position: fixed;
   left: 0;
   top: 0;
-  padding: 2.5rem;
+  padding: 1.5rem;
   background: var(--sidebar-bg);
   backdrop-filter: blur(40px);
   border-right: 1px solid var(--border-color);
@@ -116,9 +115,9 @@ body {
 }
 
 .main-content {
-  margin-left: 280px;
-  padding: 3rem;
-  width: calc(100% - 280px);
+  margin-left: 260px;
+  padding: 1.5rem;
+  width: calc(100% - 260px);
   min-height: 100vh;
   transition: all 0.4s var(--ease-premium);
 }
@@ -150,13 +149,13 @@ body {
 /* Dashboard Specifics */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2rem;
-  margin-bottom: 3rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
 }
 
 .stat-card {
-  padding: 2rem;
+  padding: 1.25rem;
   position: relative;
   overflow: hidden;
 }
@@ -200,12 +199,12 @@ input, textarea, select {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-color);
   color: var(--text-main);
-  padding: 0.85rem 1.25rem;
-  border-radius: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-radius: 0.65rem;
   width: 100%;
   outline: none;
   transition: var(--transition);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 input[type="checkbox"] {
@@ -366,4 +365,40 @@ h1, h2, h3 {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.75rem;
+}
+
+/* Public Background Video Wrapper */
+.public-wrapper {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.video-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.video-background iframe {
+  width: 100vw;
+  height: 56.25vw; /* 16:9 Aspect Ratio */
+  min-height: 100vh;
+  min-width: 177.77vh; /* 16:9 Aspect Ratio */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.content-overlay {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
 }

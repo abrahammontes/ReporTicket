@@ -78,48 +78,67 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
       isClosure: true
     };
 
-    const updated = dbService.updateTicket(localTicket.id, {
+    dbService.updateTicket(localTicket.id, {
       status: 'closed',
       notes: [...(localTicket.notes || []), closureNote]
-    });
+    }).then(result => {
+      if (result.success) {
+        // Mock the update locally for immediate UX
+        const updatedTicket = {
+          ...localTicket,
+          status: 'closed',
+          notes: [...(localTicket.notes || []), closureNote]
+        };
+        setLocalTicket(updatedTicket);
+        setIsClosingRitual(false);
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 3000);
+        if (onUpdate) onUpdate();
+      }
+    }).catch(console.error);
+  };
 
-    if (updated) {
-      setLocalTicket(updated);
-      setIsClosingRitual(false);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-      if (onUpdate) onUpdate();
+  const handleSaveSettings = async () => {
+    try {
+      const result = await dbService.updateTicket(localTicket.id, pendingUpdates);
+      if (result.success) {
+        setLocalTicket(prev => ({ ...prev, ...pendingUpdates }));
+        setPendingUpdates({});
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 3000);
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error('Error saving settings:', err);
     }
   };
 
-  const handleSaveSettings = () => {
-    const updated = dbService.updateTicket(localTicket.id, pendingUpdates);
-    if (updated) {
-      setLocalTicket(updated);
-      setPendingUpdates({});
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-      if (onUpdate) onUpdate();
-    }
-  };
-
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     if (!newNote.trim()) return;
     const notes = localTicket.notes || [];
-    const updated = dbService.updateTicket(localTicket.id, {
-      notes: [...notes, {
-        id: Date.now(),
-        text: newNote,
-        type: isInternal ? 'internal' : 'public',
-        date: new Date().toLocaleString(),
-        attachments: attachments
-      }]
-    });
-    if (updated) {
-      setLocalTicket(updated);
-      setNewNote('');
-      setAttachments([]);
-      if (onUpdate) onUpdate();
+    const noteData = {
+      id: Date.now(),
+      text: newNote,
+      type: isInternal ? 'internal' : 'public',
+      date: new Date().toLocaleString(),
+      attachments: attachments
+    };
+    
+    try {
+      const result = await dbService.updateTicket(localTicket.id, {
+        notes: [...notes, noteData]
+      });
+      if (result.success) {
+        setLocalTicket(prev => ({
+          ...prev,
+          notes: [...(prev.notes || []), noteData]
+        }));
+        setNewNote('');
+        setAttachments([]);
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error('Error adding note:', err);
     }
   };
 
@@ -142,7 +161,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
     response = response.replace('[name]', localTicket.user || '');
     response = response.replace('[id]', localTicket.id || '');
     response = response.replace('[date]', new Date().toLocaleDateString());
-    response = response.replace('[agent]', user?.name || 'Agent');
+    response = response.replace('[agent]', user?.name || t('adminAgent'));
 
     setNewNote(prev => prev + (prev ? '\n\n' : '') + response);
   };
@@ -192,7 +211,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
           fontWeight: '600'
         }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-          {t('backToList')}
+          {t('goBack')}
         </button>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <span className={`badge badge-${(pendingUpdates.priority || localTicket.priority) || 'medium'}`} style={{ padding: '0.5rem 1rem', fontSize: '0.75rem' }}>{t((pendingUpdates.priority || localTicket.priority) || 'medium').toUpperCase()}</span>

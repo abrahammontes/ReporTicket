@@ -1,187 +1,207 @@
-// Simulated Database using LocalStorage
+// API-based Database Service replacing LocalStorage
+const API_URL = 'http://localhost:3001/api';
 
-const DB_KEY = 'reporticket_db';
-
-const defaultDB = {
-  users: [
-    { 
-      id: 'admin-1', 
-      email: 'admin@reporticket.com', 
-      password: 'admin', 
-      name: 'Admin User', 
-      role: 'superadmin',
-      companyId: null,
-      preferences: { theme: 'dark', language: 'es' }
-    }
-  ],
-  companies: [],
-  tickets: [
-    { id: '1025', subject: 'Problemas con el login', user: 'Jane Smith', status: 'new', priority: 'high', date: '2024-03-18' },
-    { id: '1024', subject: 'Impresora no funciona', user: 'Bob Wilson', status: 'inprogress', priority: 'medium', date: '2024-03-17' },
-    { id: '1023', subject: 'Solicitud de actualización', user: 'Alice Cooper', status: 'closed', priority: 'low', date: '2024-03-15' },
-  ]
-};
-
-const getDB = () => {
-  const data = localStorage.getItem(DB_KEY);
-  if (!data) {
-    localStorage.setItem(DB_KEY, JSON.stringify(defaultDB));
-    return defaultDB;
-  }
-  const parsed = JSON.parse(data);
-  let updated = false;
-
-  const adminIndex = parsed.users.findIndex(u => u.id === 'admin-1');
-  if (adminIndex !== -1 && parsed.users[adminIndex].role !== 'superadmin') {
-    parsed.users[adminIndex].role = 'superadmin';
-    updated = true;
-  }
-
-  parsed.users = parsed.users.map(u => {
-    let changed = false;
-    if (!('companyId' in u)) {
-      u.companyId = null;
-      changed = true;
-    }
-    if (!u.permissions) {
-      if (u.role === 'superadmin') {
-        u.permissions = { viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: true };
-      } else if (u.role === 'admin' || u.role === 'supervisor') {
-        u.permissions = { viewAllTickets: true, assignTickets: true, manageUsers: false, manageCompanies: false };
-      } else {
-        u.permissions = { viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false };
-      }
-      changed = true;
-    }
-    if (changed) updated = true;
-    return u;
-  });
-
-  if (updated) {
-    localStorage.setItem(DB_KEY, JSON.stringify(parsed));
-  }
-  return parsed;
-};
-
-const saveDB = (db) => {
-  localStorage.setItem(DB_KEY, JSON.stringify(db));
+const getHeaders = () => {
+  const session = JSON.parse(localStorage.getItem('reporticket_session') || '{}');
+  return {
+    'Content-Type': 'application/json',
+    'X-Company-ID': session.companyId || 'master'
+  };
 };
 
 export const dbService = {
-  // User Management
-  getUsers: () => getDB().users,
-  
-  findUser: (email, password) => {
-    const db = getDB();
-    return db.users.find(u => u.email === email && u.password === password);
-  },
-  
-  registerUser: (userData) => {
-    const db = getDB();
-    if (db.users.some(u => u.email === userData.email)) {
-      throw new Error('user_exists');
-    }
-    const newUser = {
-      ...userData,
-      id: Date.now().toString(),
-      role: 'customer',
-      companyId: null,
-      permissions: { viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false },
-      preferences: { theme: 'light', language: 'es' }
-    };
-    db.users.push(newUser);
-    saveDB(db);
-    return newUser;
-  },
-  
-  updateUserProfile: (userId, updates) => {
-    const db = getDB();
-    const index = db.users.findIndex(u => u.id === userId);
-    if (index !== -1) {
-      db.users[index] = { ...db.users[index], ...updates };
-      saveDB(db);
-      return db.users[index];
-    }
-    return null;
+  // Authentication
+  login: async (email, password) => {
+    const response = await fetch(`${API_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data.user;
   },
 
-  // Ticket Management
-  getTickets: () => getDB().tickets,
-  
-  addTicket: (ticket, userName = 'Anonymous') => {
-    const db = getDB();
-    const newTicket = { 
-      status: 'new',
-      user: userName,
-      ...ticket, 
-      id: (Date.now() % 10000).toString(), 
-      date: new Date().toISOString().split('T')[0] 
-    };
-    db.tickets.unshift(newTicket);
-    saveDB(db);
-    return newTicket;
+  forgotPassword: async (email) => {
+    const response = await fetch(`${API_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
   },
 
-  updateTicket: (ticketId, updates) => {
-    const db = getDB();
-    const index = db.tickets.findIndex(t => t.id === ticketId);
-    if (index !== -1) {
-      db.tickets[index] = { ...db.tickets[index], ...updates };
-      saveDB(db);
-      return db.tickets[index];
-    }
-    return null;
+  resetPassword: async (token, password) => {
+    const response = await fetch(`${API_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password })
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
   },
 
-  deleteUser: (userId) => {
-    const db = getDB();
-    db.users = db.users.filter(u => u.id !== userId);
-    saveDB(db);
+  // Users
+  getUsers: async () => {
+    const session = JSON.parse(localStorage.getItem('reporticket_session') || '{}');
+    const endpoint = (session.role === 'superadmin') ? '/global-users' : '/users';
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      headers: getHeaders()
+    });
+    const data = await response.json();
+    return data.users || [];
   },
 
-  // Companies Management
-  getCompanies: () => {
-    const db = getDB();
-    return db.companies || [];
-  },
-  
-  addCompany: (companyData) => {
-    const db = getDB();
-    if (!db.companies) db.companies = [];
-    const newCompany = {
-      ...companyData,
-      id: 'comp-' + Date.now().toString()
-    };
-    db.companies.push(newCompany);
-    saveDB(db);
-    return newCompany;
+  registerUser: async (userData) => {
+    const session = JSON.parse(localStorage.getItem('reporticket_session') || '{}');
+    const response = await fetch(`${API_URL}/users`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ 
+        ...userData, 
+        id: 'user-' + Date.now(),
+        permissions: userData.permissions || { viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false }
+      })
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
   },
 
-  updateCompany: (companyId, updates) => {
-    const db = getDB();
-    const index = db.companies.findIndex(c => c.id === companyId);
-    if (index !== -1) {
-      db.companies[index] = { ...db.companies[index], ...updates };
-      saveDB(db);
-      return db.companies[index];
-    }
-    return null;
+  // Companies
+  getCompanies: async () => {
+    const response = await fetch(`${API_URL}/companies`, {
+      headers: getHeaders()
+    });
+    const data = await response.json();
+    return data.companies || [];
   },
 
-  deleteCompany: (companyId) => {
-    const db = getDB();
-    db.companies = db.companies.filter(c => c.id !== companyId);
-    db.users = db.users.map(u => u.companyId === companyId ? { ...u, companyId: null } : u);
-    saveDB(db);
+  registerCompany: async (name, adminUser) => {
+    const response = await fetch(`${API_URL}/register-company`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, adminUser })
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
   },
 
-  // Session Management
+  // Tickets
+  getTickets: async () => {
+    const response = await fetch(`${API_URL}/tickets`, {
+      headers: getHeaders()
+    });
+    const data = await response.json();
+    return data.tickets || [];
+  },
+
+  addTicket: async (ticket, userName) => {
+    const response = await fetch(`${API_URL}/tickets`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        ...ticket,
+        id: (Date.now() % 10000).toString(),
+        user_name: userName
+      })
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
+  },
+
+  updateTicket: async (id, updates) => {
+    const response = await fetch(`${API_URL}/tickets/${id}`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(updates)
+    });
+    return await response.json();
+  },
+
+  // Profile & User Management
+  updateUserProfile: async (userId, updates) => {
+    const response = await fetch(`${API_URL}/users/${userId}`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(updates)
+    });
+    return await response.json();
+  },
+
+  deleteUser: async (userId) => {
+    const response = await fetch(`${API_URL}/users/${userId}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    return await response.json();
+  },
+
+  // Company Management
+  updateCompany: async (companyId, updates) => {
+    const response = await fetch(`${API_URL}/companies/${companyId}`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(updates)
+    });
+    return await response.json();
+  },
+
+  deleteCompany: async (companyId) => {
+    const response = await fetch(`${API_URL}/companies/${companyId}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    return await response.json();
+  },
+
+  // System Settings
+  updateSystemSettings: async (settings) => {
+    const response = await fetch(`${API_URL}/settings`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(settings)
+    });
+    return await response.json();
+  },
+
+  // Session Management (Stay in LocalStorage for simplicity)
   setSession: (user) => {
     if (user) {
       localStorage.setItem('reporticket_session', JSON.stringify(user));
     } else {
       localStorage.removeItem('reporticket_session');
     }
+  },
+
+  getSystemInfo: async () => {
+    const response = await fetch(`${API_URL}/system-info`, {
+      headers: getHeaders()
+    });
+    return await response.json();
+  },
+
+  testDatabaseConnection: async (config) => {
+    const response = await fetch(`${API_URL}/settings/database/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    return await response.json();
+  },
+
+  updateDatabaseSettings: async (config) => {
+    const response = await fetch(`${API_URL}/settings/database/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    return await response.json();
   },
 
   getSession: () => {

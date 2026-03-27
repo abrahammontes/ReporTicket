@@ -3,9 +3,9 @@ import Logo from './Logo';
 
 const Landing = ({ onGetStarted, onLogin, theme, t }) => {
   return (
-    <div className="landing-page animate-in">
+    <div className="landing-page animate-in" style={{ background: 'transparent' }}>
       <nav style={{ 
-        padding: '1.5rem 5%', 
+        padding: '0.75rem 5%', 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center', 
@@ -49,7 +49,7 @@ const Landing = ({ onGetStarted, onLogin, theme, t }) => {
       </nav>
 
       <div className="hero" style={{ 
-        padding: '10rem 5%', 
+        padding: '5rem 5%', 
         textAlign: 'center', 
         maxWidth: '1200px', 
         margin: '0 auto',
@@ -100,12 +100,12 @@ const Landing = ({ onGetStarted, onLogin, theme, t }) => {
       </div>
 
       <div style={{ 
-        padding: '5rem 5%', 
+        padding: '3rem 5%', 
         display: 'grid', 
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
-        gap: '2.5rem', 
+        gap: '1.5rem', 
         maxWidth: '1200px', 
-        margin: '0 auto 10rem' 
+        margin: '0 auto 4rem' 
       }}>
         {[
           { icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', title: t('secure'), sub: t('secureDesc') },

@@ -157,8 +157,27 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>{t('cancel')}</button>
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button 
+            onClick={onCancel} 
+            className="card-hover"
+            style={{ 
+              background: 'rgba(255,255,255,0.05)', 
+              border: '1px solid var(--border-color)', 
+              color: 'var(--text-muted)', 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.5rem',
+              padding: '0.6rem 1.25rem',
+              borderRadius: '0.85rem',
+              fontSize: '0.85rem',
+              fontWeight: '600'
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            {t('goBack')}
+          </button>
           <button onClick={handleSubmit} className="btn-primary">{t('initializeTicket')}</button>
         </div>
       </div>

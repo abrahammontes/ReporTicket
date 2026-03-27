@@ -18,12 +18,18 @@ const Profile = ({ user, t, onUpdate }) => {
     }
   };
 
-  const handleSave = () => {
-    const updatedUser = dbService.updateUserProfile(user.id, { name, email, photo });
-    if (updatedUser) {
-      onUpdate(updatedUser);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+  const handleSave = async () => {
+    try {
+      const result = await dbService.updateUserProfile(user.id, { name, email, photo });
+      if (result.success) {
+        // Since result.success is true, we update the local user state with new values
+        const updatedUser = { ...user, name, email, photo };
+        onUpdate(updatedUser);
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error('Error updating profile:', err);
     }
   };
 
@@ -81,7 +87,7 @@ const Profile = ({ user, t, onUpdate }) => {
               type="text" 
               value={name} 
               onChange={(e) => setName(e.target.value)}
-              placeholder="Your Name"
+              placeholder={t('enterNamePlaceholder')}
             />
           </div>
           
@@ -91,13 +97,13 @@ const Profile = ({ user, t, onUpdate }) => {
               type="email" 
               value={email} 
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
+              placeholder={t('enterEmailPlaceholder')}
             />
           </div>
 
           <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{t('role')}</p>
-            <p style={{ fontWeight: '600', textTransform: 'uppercase', color: 'var(--primary)' }}>{user?.role === 'admin' ? t('administrator') : t('customer')}</p>
+            <p style={{ fontWeight: '600', textTransform: 'uppercase', color: 'var(--primary)' }}>{t(`roles.${user?.role || 'customer'}`)}</p>
           </div>
 
           {success && (

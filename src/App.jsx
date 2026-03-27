@@ -9,37 +9,69 @@ import Login from './components/Login';
 import Profile from './components/Profile';
 import AdminPanel from './components/AdminPanel';
 import UserGuide from './components/UserGuide';
+import ResetPassword from './components/ResetPassword';
 import { translations } from './translations';
 import { dbService } from './services/db';
 
 function App() {
-  const initialUser = dbService.getSession();
-  const [currentUser, setCurrentUser] = useState(initialUser);
-  const [view, setView] = useState(initialUser ? 'dashboard' : 'landing');
-  const [language, setLanguage] = useState(initialUser?.preferences?.language || 'es');
-  const [theme, setTheme] = useState(initialUser?.preferences?.theme || 'dark');
-  const [allTickets, setAllTickets] = useState(dbService.getTickets() || []);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [view, setView] = useState('landing');
+  const [language, setLanguage] = useState('es');
+  const [theme, setTheme] = useState('dark');
+  const [allTickets, setAllTickets] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [userRole, setUserRole] = useState(initialUser?.role || 'customer');
+  const [userRole, setUserRole] = useState('customer');
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Initialize session
+  useEffect(() => {
+    // Check for password reset token in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('token')) {
+      setView('resetPassword');
+      setIsLoaded(true);
+      return;
+    }
+
+    const session = dbService.getSession();
+    if (session) {
+      setCurrentUser(session);
+      setUserRole(session.role);
+      setLanguage(session.preferences?.language || 'es');
+      setTheme(session.preferences?.theme || 'dark');
+      setView('dashboard');
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // Fetch tickets when user changes
+  useEffect(() => {
+    if (currentUser) {
+      dbService.getTickets().then(setAllTickets).catch(console.error);
+      dbService.getUsers().then(setAllUsers).catch(console.error);
+    }
+  }, [currentUser]);
   
   const visibleTickets = React.useMemo(() => {
     if (!currentUser) return [];
     if (userRole === 'superadmin') return allTickets;
     
     if (currentUser.permissions?.viewAllTickets) {
-      const users = dbService.getUsers();
-      const companyUserNames = users.filter(u => u.companyId === currentUser.companyId).map(u => u.name);
+      const companyUserNames = allUsers.filter(u => u.companyId === currentUser.companyId).map(u => u.name);
       return allTickets.filter(t => companyUserNames.includes(t.user) || t.user === currentUser.name);
     }
     
     return allTickets.filter(t => t.user === currentUser.name);
-  }, [allTickets, currentUser, userRole]);
+  }, [allTickets, allUsers, currentUser, userRole]);
   const [authError, setAuthError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
 
   const t = (key) => (translations[language] && translations[language][key]) || key;
 
   const handleViewChange = (newView) => {
     setAuthError(null);
+    setSuccessMsg(null);
     setView(newView);
   };
 
@@ -74,34 +106,43 @@ function App() {
     setView('detail');
   };
 
-  const handleLogin = (email, password) => {
+  const handleLogin = async (email, password) => {
     setAuthError(null);
-    const user = dbService.findUser(email, password);
-    if (user) {
-      setCurrentUser(user);
-      setUserRole(user.role);
-      setTheme(user.preferences.theme);
-      setLanguage(user.preferences.language);
-      dbService.setSession(user);
-      setView('dashboard');
-    } else {
-      setAuthError(t('errorInvalidCredentials'));
+    try {
+      const user = await dbService.login(email, password);
+      if (user) {
+        setCurrentUser(user);
+        setUserRole(user.role);
+        setTheme(user.preferences?.theme || 'dark');
+        setLanguage(user.preferences?.language || 'es');
+        dbService.setSession(user);
+        setView('dashboard');
+      }
+    } catch (err) {
+      setAuthError(err.message || t('errorInvalidCredentials'));
     }
   };
 
-  const handleRegister = (userData) => {
+  const handleRegister = async (userData) => {
     setAuthError(null);
     try {
-      const user = dbService.registerUser(userData);
-      setCurrentUser(user);
-      setUserRole(user.role);
-      dbService.setSession(user);
-      setView('dashboard');
+      // 1. Create company and its database
+      const regResult = await dbService.registerCompany(userData.companyName, {
+        name: userData.name,
+        email: userData.email,
+        password: userData.password
+      });
+
+      // 2. Refresh local context and notify
+      setSuccessMsg(t('registrationSuccess'));
+      setView('login');
+      
+      // Optional: Automatic notifications can stay in backend register-company logic
     } catch (err) {
-      if (err.message === 'user_exists') {
+      if (err.message.includes('user_exists')) {
         setAuthError(t('errorUserExists'));
       } else {
-        setAuthError('Error during registration');
+        setAuthError(t('errorRegistration'));
       }
     }
   };
@@ -109,9 +150,61 @@ function App() {
 
   const renderView = () => {
     // Non-layout views
-    if (view === 'landing') return <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} theme={theme} t={t} />;
-    if (view === 'register') return <Register onRegister={handleRegister} onLogin={() => handleViewChange('login')} onBack={() => handleViewChange('landing')} t={t} error={authError} />;
-    if (view === 'login') return <Login onLogin={handleLogin} onRegister={() => handleViewChange('register')} onBack={() => handleViewChange('landing')} theme={theme} t={t} error={authError} />;
+    const isPublicView = ['landing', 'register', 'login', 'resetPassword'].includes(view);
+    
+    let publicContent = null;
+    if (view === 'landing') publicContent = <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} theme={theme} t={t} />;
+    if (view === 'register') publicContent = <Register onRegister={handleRegister} onLogin={() => handleViewChange('login')} onBack={() => handleViewChange('landing')} t={t} error={authError} />;
+    if (view === 'login') publicContent = <Login onLogin={handleLogin} onRegister={() => handleViewChange('register')} onBack={() => handleViewChange('landing')} theme={theme} t={t} error={authError} successMsg={successMsg} />;
+    if (view === 'resetPassword') publicContent = <ResetPassword theme={theme} t={t} onBack={() => handleViewChange('login')} />;
+
+    if (isPublicView) {
+      return (
+        <div className="public-wrapper" style={{ position: 'relative', minHeight: '100vh', overflow: 'hidden' }}>
+          {/* Global YouTube Background */}
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: -1,
+            pointerEvents: 'none',
+            overflow: 'hidden',
+            background: 'black'
+          }}>
+            <iframe
+              src="https://www.youtube.com/embed/TqRjQswjWCs?autoplay=1&mute=1&loop=1&controls=0&showinfo=0&autohide=1&playlist=TqRjQswjWCs&background=1&playsinline=1&rel=0"
+              frameBorder="0"
+              allow="autoplay; encrypted-media"
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                width: '177.77vh',
+                height: '100vh',
+                minWidth: '100vw',
+                minHeight: '56.25vw',
+                transform: 'translate(-50%, -50%)',
+                opacity: 0.6
+              }}
+            ></iframe>
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              background: 'linear-gradient(rgba(8, 9, 10, 0.4) 0%, rgba(8, 9, 10, 0.8) 100%)',
+              zIndex: 1
+            }}></div>
+          </div>
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            {publicContent}
+          </div>
+        </div>
+      );
+    }
 
     // Layout views
     let content;
@@ -121,12 +214,15 @@ function App() {
       content = <AdminPanel stats={stats} t={t} tickets={visibleTickets} onSelectTicket={handleTicketClick} user={currentUser} activeTab="tickets" />;
     } else if (view === 'usersAndCompanies') {
       content = <AdminPanel stats={stats} t={t} tickets={visibleTickets} onSelectTicket={handleTicketClick} user={currentUser} activeTab="users" />;
+    } else if (view === 'settings') {
+      content = <AdminPanel stats={stats} t={t} tickets={visibleTickets} user={currentUser} activeTab="settings" />;
     } else if (view === 'detail') {
-      content = <TicketDetail ticket={selectedTicket} onBack={() => handleViewChange('tickets')} t={t} onUpdate={() => setAllTickets(dbService.getTickets())} userRole={userRole} user={currentUser} />;
+      content = <TicketDetail ticket={selectedTicket} onBack={() => handleViewChange('tickets')} t={t} onUpdate={() => dbService.getTickets().then(setAllTickets)} userRole={userRole} user={currentUser} />;
     } else if (view === 'new') {
-      const handleNewTicket = (ticketData) => {
-        dbService.addTicket(ticketData, currentUser?.name || 'User');
-        setAllTickets(dbService.getTickets());
+      const handleNewTicket = async (ticketData) => {
+        await dbService.addTicket(ticketData, currentUser?.name || 'User');
+        const updated = await dbService.getTickets();
+        setAllTickets(updated);
         handleViewChange('dashboard');
       };
       content = <NewTicket onCancel={() => handleViewChange('dashboard')} onSubmit={handleNewTicket} t={t} user={currentUser} />;
