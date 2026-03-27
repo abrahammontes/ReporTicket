@@ -574,7 +574,32 @@ app.post('/api/tickets', withCompanyPool, async (req, res) => {
   }
 });
 
-// User Endpoints
+app.put('/api/tickets/:id', withCompanyPool, async (req, res) => {
+  const { status, agent_id } = req.body;
+  try {
+    await req.db.execute(
+      'UPDATE tickets SET status = ?, agent_id = ?, updated_at = NOW() WHERE id = ?',
+      [status, agent_id || null, req.params.id]
+    );
+    res.json({ success: true, message: 'Ticket updated' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/tickets/:id/notes', withCompanyPool, async (req, res) => {
+  const { content, user_id, is_internal } = req.body;
+  try {
+    await req.db.execute(
+      'INSERT INTO ticket_notes (ticket_id, company_id, user_id, content, is_internal) VALUES (?, ?, ?, ?, ?)',
+      [req.params.id, req.companyId, user_id || null, content, is_internal ? 1 : 0]
+    );
+    res.json({ success: true, message: 'Note added' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 app.get('/api/users', withCompanyPool, async (req, res) => {
   try {
     const query = process.env.DB_MODE === 'single'
