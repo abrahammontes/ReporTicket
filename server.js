@@ -785,10 +785,9 @@ app.post('/api/settings', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, async () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  
-  // Load saved DB configuration on startup
+
+// Load saved DB config and start server (only when run directly, not as serverless)
+const startServer = async () => {
   try {
     const [rows] = await masterPool.query('SELECT setting_value FROM global_settings WHERE setting_key = ?', ['dbConfig']);
     if (rows.length > 0) {
@@ -799,10 +798,23 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.log('Using environment variables for Database Configuration.');
   }
-});
+};
 
-// Serve React frontend (must be after all API routes)
-app.use(express.static(path.join(__dirname, 'dist')));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
+// Serve React frontend in local/cPanel mode (Vercel serves static files via CDN)
+if (process.env.SERVE_STATIC === 'true') {
+  app.use(express.static(path.join(__dirname, 'dist')));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  });
+}
+
+// Start listening only when not imported by Vercel serverless
+if (process.env.VERCEL !== '1') {
+  startServer().then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  });
+}
+
+export default app;
