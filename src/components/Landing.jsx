@@ -1,7 +1,7 @@
 import React from 'react';
 import Logo from './Logo';
 
-const Landing = ({ onGetStarted, onLogin, theme, setTheme, t }) => {
+const Landing = ({ onGetStarted, onLogin, theme, setTheme, t, language, setLanguage }) => {
   return (
     <div className="landing-page animate-in" style={{ background: 'transparent' }}>
       <nav style={{ 
@@ -18,6 +18,27 @@ const Landing = ({ onGetStarted, onLogin, theme, setTheme, t }) => {
       }}>
         <Logo theme={theme} size={160} />
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <button
+            onClick={() => setLanguage(language === 'en' ? 'es' : 'en')}
+            title={language === 'en' ? 'Spanish' : 'English'}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border-color)',
+              borderRadius: '0.5rem',
+              padding: '0.5rem',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'var(--transition)',
+              fontSize: '0.75rem',
+              fontWeight: '800',
+              minWidth: '40px'
+            }}
+          >
+            {language === 'en' ? 'ES' : 'EN'}
+          </button>
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             title={theme === 'dark' ? t('lightMode') : t('darkMode')}

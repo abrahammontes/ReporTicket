@@ -157,10 +157,10 @@ function App() {
     const isPublicView = ['landing', 'register', 'login', 'resetPassword'].includes(view);
     
     let publicContent = null;
-    if (view === 'landing') publicContent = <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} theme={theme} setTheme={setTheme} t={t} />;
-    if (view === 'register') publicContent = <Register onRegister={handleRegister} onLogin={() => handleViewChange('login')} onBack={() => handleViewChange('landing')} t={t} error={authError} />;
-    if (view === 'login') publicContent = <Login onLogin={handleLogin} onRegister={() => handleViewChange('register')} onBack={() => handleViewChange('landing')} theme={theme} t={t} error={authError} successMsg={successMsg} />;
-    if (view === 'resetPassword') publicContent = <ResetPassword theme={theme} t={t} onBack={() => handleViewChange('login')} />;
+    if (view === 'landing') publicContent = <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} theme={theme} setTheme={setTheme} t={t} language={language} setLanguage={setLanguage} />;
+    if (view === 'register') publicContent = <Register onRegister={handleRegister} onLogin={() => handleViewChange('login')} onBack={() => handleViewChange('landing')} t={t} error={authError} language={language} setLanguage={setLanguage} />;
+    if (view === 'login') publicContent = <Login onLogin={handleLogin} onRegister={() => handleViewChange('register')} onBack={() => handleViewChange('landing')} theme={theme} t={t} error={authError} successMsg={successMsg} language={language} setLanguage={setLanguage} />;
+    if (view === 'resetPassword') publicContent = <ResetPassword theme={theme} t={t} onBack={() => handleViewChange('login')} language={language} setLanguage={setLanguage} />;
 
     if (isPublicView) {
       return (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/db';
 
-const Register = ({ onRegister, onLogin, onBack, t, error }) => {
+const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -61,27 +61,46 @@ const Register = ({ onRegister, onLogin, onBack, t, error }) => {
         padding: '2rem',
         animation: localError ? 'none' : 'fadeIn 0.5s ease-out'
       }}>
-        <button 
-          onClick={onBack} 
-          className="card-hover"
-          style={{ 
-            background: 'var(--bg-hover)', 
-            border: '1px solid var(--border-color)', 
-            color: 'var(--text-muted)', 
-            cursor: 'pointer', 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '0.5rem',
-            padding: '0.6rem 1.25rem',
-            borderRadius: '0.85rem',
-            fontSize: '0.85rem',
-            fontWeight: '600',
-            marginBottom: '2rem'
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-          {t('backToHome')}
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <button 
+            onClick={onBack} 
+            className="card-hover"
+            style={{ 
+              background: 'var(--bg-hover)', 
+              border: '1px solid var(--border-color)', 
+              color: 'var(--text-muted)', 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.5rem',
+              padding: '0.6rem 1.25rem',
+              borderRadius: '0.85rem',
+              fontSize: '0.85rem',
+              fontWeight: '600'
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            {t('backToHome')}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLanguage(language === 'en' ? 'es' : 'en')}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border-color)',
+              borderRadius: '0.5rem',
+              padding: '0.5rem 0.75rem',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              fontSize: '0.75rem',
+              fontWeight: '800',
+              transition: 'var(--transition)'
+            }}
+          >
+            {language === 'en' ? 'ES' : 'EN'}
+          </button>
+        </div>
         
         <h2 style={{ fontSize: '1.75rem', fontWeight: '800', marginBottom: '0.5rem' }}>{t('createAccount')}</h2>
         <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.95rem' }}>{t('joinUs')}</p>
