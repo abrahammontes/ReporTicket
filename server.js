@@ -740,15 +740,32 @@ app.get('/api/global-users', async (req, res) => {
 });
 
 // Company User Management
-app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
-  const { name, email, role, permissions, phone, extension, companyId } = req.body;
+app.patch('/api/users/:id', async (req, res) => {
+  const { name, email, role, permissions, phone, extension, companyId: newCompanyId } = req.body;
   const userRole = req.headers['x-user-role'];
+  const requesterCompanyId = req.headers['x-company-id'];
 
   if ((name || email) && userRole !== 'superadmin') {
     return res.status(403).json({ success: false, message: 'Only superadmin can edit name or email' });
   }
 
   try {
+    // Resolve the target user's company
+    const [gdRows] = await masterPool.query('SELECT company_id FROM global_directory WHERE user_id = ?', [req.params.id]);
+    const targetCompanyId = gdRows.length > 0 ? gdRows[0].company_id : null;
+
+    // Get the correct pool for the target user
+    let pool;
+    if (userRole === 'superadmin' && targetCompanyId) {
+      pool = await getCompanyPool(targetCompanyId);
+    } else {
+      pool = await getCompanyPool(requesterCompanyId);
+    }
+
+    if (!pool) {
+      return res.status(404).json({ success: false, message: 'Company database not found' });
+    }
+
     const updates = [];
     const params = [];
     if (name) { updates.push('name = ?'); params.push(name); }
@@ -757,9 +774,9 @@ app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
     if (permissions) { updates.push('permissions = ?'); params.push(JSON.stringify(permissions)); }
     if (phone) { updates.push('phone = ?'); params.push(phone); }
     if (extension) { updates.push('extension = ?'); params.push(extension); }
-    if (companyId !== undefined) { 
+    if (newCompanyId !== undefined) { 
       updates.push('company_id = ?'); 
-      params.push(companyId === '' ? null : companyId); 
+      params.push(newCompanyId === '' ? null : newCompanyId); 
     }
     
     if (updates.length > 0) {
@@ -767,9 +784,9 @@ app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
       const query = process.env.DB_MODE === 'single'
         ? `UPDATE company_users SET ${updates.join(', ')} WHERE id = ? AND company_id = ?`
         : `UPDATE company_users SET ${updates.join(', ')} WHERE id = ?`;
-      if (process.env.DB_MODE === 'single') params.push(req.companyId);
+      if (process.env.DB_MODE === 'single') params.push(targetCompanyId || requesterCompanyId);
       
-      await req.db.execute(query, params);
+      await pool.execute(query, params);
       
       // Sync in global_directory
       const globalUpdates = [];
@@ -777,9 +794,9 @@ app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
       if (role) { globalUpdates.push('role = ?'); globalParams.push(role); }
       if (name) { globalUpdates.push('name = ?'); globalParams.push(name); }
       if (email) { globalUpdates.push('email = ?'); globalParams.push(email); }
-      if (companyId !== undefined) { 
+      if (newCompanyId !== undefined) { 
         globalUpdates.push('company_id = ?'); 
-        globalParams.push(companyId === '' ? null : companyId); 
+        globalParams.push(newCompanyId === '' ? null : newCompanyId); 
       }
       if (permissions) {
         globalUpdates.push('permissions = ?');
@@ -797,14 +814,27 @@ app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
   }
 });
 
-app.delete('/api/users/:id', withCompanyPool, async (req, res) => {
+app.delete('/api/users/:id', async (req, res) => {
   try {
-    const query = process.env.DB_MODE === 'single'
-      ? 'DELETE FROM company_users WHERE id = ? AND company_id = ?'
-      : 'DELETE FROM company_users WHERE id = ?';
-    const params = process.env.DB_MODE === 'single' ? [req.params.id, req.companyId] : [req.params.id];
-    
-    await req.db.execute(query, params);
+    const [gdRows] = await masterPool.query('SELECT company_id FROM global_directory WHERE user_id = ?', [req.params.id]);
+    const targetCompanyId = gdRows.length > 0 ? gdRows[0].company_id : null;
+    const requesterCompanyId = req.headers['x-company-id'];
+
+    let pool;
+    if (req.headers['x-user-role'] === 'superadmin' && targetCompanyId) {
+      pool = await getCompanyPool(targetCompanyId);
+    } else {
+      pool = await getCompanyPool(requesterCompanyId);
+    }
+
+    if (pool) {
+      const query = process.env.DB_MODE === 'single'
+        ? 'DELETE FROM company_users WHERE id = ? AND company_id = ?'
+        : 'DELETE FROM company_users WHERE id = ?';
+      const params = process.env.DB_MODE === 'single' ? [req.params.id, targetCompanyId || requesterCompanyId] : [req.params.id];
+      await pool.execute(query, params);
+    }
+
     await masterPool.execute('DELETE FROM global_directory WHERE user_id = ?', [req.params.id]);
     res.json({ success: true, message: 'User deleted' });
   } catch (error) {
