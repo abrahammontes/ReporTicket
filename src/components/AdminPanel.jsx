@@ -9,6 +9,9 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [newCompanyName, setNewCompanyName] = useState('');
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
   const [companySuccessMessage, setCompanySuccessMessage] = useState('');
   const [systemInfo, setSystemInfo] = useState({ dbMode: 'single', dbHost: 'localhost', dbPrefix: '', version: '1.2.0' });
 
@@ -68,20 +71,27 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
 
   const handleCreateCompany = async (e) => {
     e.preventDefault();
-    if (!newCompanyName.trim()) return;
+    if (!newCompanyName.trim() || !newAdminName.trim() || !newAdminEmail.trim() || !newAdminPassword.trim()) {
+      alert(t('fillAllFields') || 'Por favor completa todos los campos');
+      return;
+    }
     try {
       await dbService.registerCompany(newCompanyName.trim(), {
-        name: 'Admin ' + newCompanyName.trim(),
-        email: 'admin@' + newCompanyName.trim().toLowerCase().replace(/\s/g, '') + '.com',
-        password: 'admin' + Date.now().toString().slice(-4)
+        name: newAdminName.trim(),
+        email: newAdminEmail.trim(),
+        password: newAdminPassword.trim()
       });
       const updated = await dbService.getCompanies();
       setCompanies(updated);
       setNewCompanyName('');
+      setNewAdminName('');
+      setNewAdminEmail('');
+      setNewAdminPassword('');
       setCompanySuccessMessage(t('companyCreatedMsg'));
       setTimeout(() => setCompanySuccessMessage(''), 3000);
     } catch (err) {
       console.error('Error creating company:', err);
+      alert(err.message);
     }
   };
 
@@ -534,15 +544,50 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
               </div>
             </div>
 
-            <form onSubmit={handleCreateCompany} style={{ display: 'flex', gap: '1rem', maxWidth: '500px' }}>
-              <input 
-                type="text" 
-                placeholder={t('companyName')} 
-                value={newCompanyName}
-                onChange={(e) => setNewCompanyName(e.target.value)}
-                style={{ flex: 1 }}
-              />
-              <button type="submit" className="btn-primary" style={{ padding: '0.75rem 1.5rem' }}>
+            <form onSubmit={handleCreateCompany} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '500px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('companyName')}</label>
+                  <input 
+                    type="text" 
+                    placeholder={t('enterCompanyPlaceholder')} 
+                    value={newCompanyName}
+                    onChange={(e) => setNewCompanyName(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('administrator')}</label>
+                  <input 
+                    type="text" 
+                    placeholder={t('enterNamePlaceholder')} 
+                    value={newAdminName}
+                    onChange={(e) => setNewAdminName(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('emailAddress')}</label>
+                  <input 
+                    type="email" 
+                    placeholder={t('enterEmailPlaceholder')} 
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('password')}</label>
+                  <input 
+                    type="password" 
+                    placeholder="********" 
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+              <button type="submit" className="btn-primary" style={{ padding: '1rem', marginTop: '0.5rem' }}>
                 {t('create')}
               </button>
             </form>

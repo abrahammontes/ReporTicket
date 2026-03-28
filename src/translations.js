@@ -235,7 +235,8 @@ export const translations = {
     saveDBConfig: "Save DB Configuration",
     settingsDesc: "Configure global system parameters, including mail servers and database connections.",
     usersAndCompaniesDesc: "Manage the directory of authorized users and the companies they belong to.",
-    usersAndCompanies: "Users & Companies"
+    usersAndCompanies: "Users & Companies",
+    fillAllFields: "Please fill in all fields"
   },
   es: {
     dashboard: "Panel de Usuario",
@@ -472,6 +473,7 @@ export const translations = {
     dbModeSingle: "Base de Datos Única (Compartido)",
     dbModeMulti: "Multi-Base de Datos (Aislado)",
     testDBConnection: "Probar Conexión DB",
-    saveDBConfig: "Guardar Configuración DB"
+    saveDBConfig: "Guardar Configuración DB",
+    fillAllFields: "Por favor, completa todos los campos"
   }
 };

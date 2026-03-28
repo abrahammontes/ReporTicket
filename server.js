@@ -489,8 +489,8 @@ app.post('/api/register-company', async (req, res) => {
 
       // 5. Sync with global directory
       await masterPool.execute(
-        'INSERT INTO global_directory (email, user_id, name, company_id, password, role) VALUES (?, ?, ?, ?, ?, ?)',
-        [adminUser.email, adminId, adminUser.name, companyId, adminUser.password, 'admin']
+        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [adminUser.email, adminId, adminUser.name, companyId, JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false }), adminUser.password, 'admin']
       );
 
       if (!isSingle) await targetPool.end();
@@ -661,8 +661,8 @@ app.post('/api/users', withCompanyPool, async (req, res) => {
 
     // 2. Sync with global directory
     await masterPool.execute(
-      'INSERT INTO global_directory (email, user_id, name, company_id, password, role) VALUES (?, ?, ?, ?, ?, ?)',
-      [email, userId, name, req.companyId, hashedPassword, role]
+      'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [email, userId, name, req.companyId, JSON.stringify(permissions || {}), hashedPassword, role]
     );
 
     res.json({ success: true, message: 'User registered successfully' });
@@ -711,7 +711,7 @@ app.delete('/api/companies/:id', async (req, res) => {
 // Global Users (Master Pool - for Super Admin)
 app.get('/api/global-users', async (req, res) => {
   try {
-    const [users] = await masterPool.query('SELECT user_id AS id, name, email, role, company_id FROM global_directory');
+    const [users] = await masterPool.query('SELECT user_id AS id, name, email, role, company_id, permissions FROM global_directory');
     res.json({ success: true, users });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -759,6 +759,10 @@ app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
       if (companyId !== undefined) { 
         globalUpdates.push('company_id = ?'); 
         globalParams.push(companyId === '' ? null : companyId); 
+      }
+      if (permissions) {
+        globalUpdates.push('permissions = ?');
+        globalParams.push(JSON.stringify(permissions));
       }
       
       if (globalUpdates.length > 0) {

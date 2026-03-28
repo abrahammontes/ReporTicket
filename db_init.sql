@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS global_directory (
     user_id VARCHAR(50) NOT NULL,
     name VARCHAR(255),
     company_id VARCHAR(50),
+    permissions JSON,
     password VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL,
     reset_token VARCHAR(255),
