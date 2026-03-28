@@ -75,18 +75,32 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
           </div>
         </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>{t('department')}</label>
-          <select 
-            value={formData.department}
-            onChange={(e) => setFormData({...formData, department: e.target.value})}
-          >
-            <option value="support">{t('support')}</option>
-            <option value="sales">{t('sales')}</option>
-            <option value="billing">{t('billing')}</option>
-            <option value="accounting">{t('accounting')}</option>
-            <option value="accountsPayable">{t('accountsPayable')}</option>
-          </select>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>{t('area') || t('department')}</label>
+            <select 
+              value={formData.department}
+              onChange={(e) => setFormData({...formData, department: e.target.value})}
+            >
+              <option value="support">{t('support')}</option>
+              <option value="sales">{t('sales')}</option>
+              <option value="billing">{t('billing')}</option>
+              <option value="accounting">{t('accounting')}</option>
+              <option value="accountsPayable">{t('accountsPayable')}</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>{t('priority')}</label>
+            <select 
+              value={formData.priority}
+              onChange={(e) => setFormData({...formData, priority: e.target.value})}
+            >
+              <option value="low">{t('low')}</option>
+              <option value="medium">{t('medium')}</option>
+              <option value="high">{t('high')}</option>
+              <option value="urgent">{t('urgent')}</option>
+            </select>
+          </div>
         </div>
 
         <div style={{ marginBottom: '1.5rem' }}>
