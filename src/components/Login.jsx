@@ -103,8 +103,8 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error, successMsg }) => 
             }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             </div>
-            <h3 style={{ marginBottom: '1rem' }}>{t('passwordResetSuccess')}</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: '1.6' }}>{t('passwordResetSuccessDesc')}</p>
+            <h3 style={{ marginBottom: '1rem' }}>{t('recoveryEmailSent')}</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: '1.6' }}>{t('recoveryEmailSentDesc')}</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
