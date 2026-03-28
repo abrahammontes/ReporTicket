@@ -910,7 +910,16 @@ app.get('/api/tickets', withCompanyPool, async (req, res) => {
     
     query += ' ORDER BY created_at DESC';
     
-    const [tickets] = await req.db.query(query, params);
+    const [rows] = await req.db.query(query, params);
+    const tickets = rows.map(t => {
+      let parsedNotes = [];
+      try {
+        parsedNotes = typeof t.notes === 'string' ? JSON.parse(t.notes) : (t.notes || []);
+      } catch (e) {
+        parsedNotes = [];
+      }
+      return { ...t, notes: parsedNotes };
+    });
     res.json({ success: true, tickets });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1242,16 +1251,32 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
       if (ticketRows.length > 0) {
         let currentNotes = [];
         try {
-            currentNotes = typeof ticketRows[0].notes === 'string' ? JSON.parse(ticketRows[0].notes) : (ticketRows[0].notes || []);
+            const rawNotes = ticketRows[0].notes;
+            currentNotes = typeof rawNotes === 'string' ? JSON.parse(rawNotes) : (rawNotes || []);
+            if (!Array.isArray(currentNotes)) currentNotes = [];
         } catch (e) {
             currentNotes = [];
         }
-        // If notes from frontend is the full array, we just use it, otherwise we append
-        const updatedNotes = notes.length > currentNotes.length ? notes : [...currentNotes, latestNote];
+        
+        // Ensure we don't have a corrupt "string-spread" situation from frontend
+        // If 'notes' from body is just the latest note in an array, use it. 
+        // If frontend sent the full array, ensure it's valid.
+        let finalNotes;
+        if (Array.isArray(notes) && notes.length > 0) {
+            // Check if the frontend sent the full history plus the new one
+            // or if it sent something that needs appending.
+            if (notes.length > currentNotes.length) {
+                finalNotes = notes;
+            } else {
+                finalNotes = [...currentNotes, latestNote];
+            }
+        } else {
+            finalNotes = [...currentNotes, latestNote];
+        }
         
         await req.db.execute(
           'UPDATE tickets SET notes = ?, updated_at = NOW() WHERE id = ?',
-          [JSON.stringify(updatedNotes), req.params.id]
+          [JSON.stringify(finalNotes), req.params.id]
         );
       }
       

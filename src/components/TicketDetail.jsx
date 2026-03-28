@@ -126,7 +126,16 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
 
   const handleAddNote = async () => {
     if (!newNote.trim()) return;
-    const notes = localTicket.notes || [];
+    let notes = localTicket.notes || [];
+    if (typeof notes === 'string') {
+      try {
+        notes = JSON.parse(notes);
+      } catch (e) {
+        notes = [];
+      }
+    }
+    if (!Array.isArray(notes)) notes = [];
+
     const noteData = {
       id: Date.now(),
       text: newNote,
