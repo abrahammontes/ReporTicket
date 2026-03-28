@@ -223,23 +223,20 @@ const withCompanyPool = async (req, res, next) => {
 const getTicketInvolvedParties = async (ticketId, companyId, db) => {
   try {
     console.log(`Searching involved parties for ticket ${ticketId} in company ${companyId}`);
-    // 1. Get Ticket and Customer info
-    let ticketQuery = 'SELECT t.subject, t.user_id, t.agent_id, u.email as customer_email, u.name as customer_name ' +
+    let ticketQuery = 'SELECT t.subject, t.user_id, t.agent_id, t.company_id, u.email as customer_email, u.name as customer_name ' +
                       'FROM tickets t ' +
-                      'LEFT JOIN company_users u ON t.user_id = u.id ' +
+                      'LEFT JOIN company_users u ON t.user_id = u.id AND (u.company_id = t.company_id OR ? = "master") ' +
                       'WHERE t.id = ?';
-    let ticketParams = [ticketId];
-    if (process.env.DB_MODE === 'single') {
-        ticketQuery += ' AND t.company_id = ?';
-        ticketParams.push(companyId);
-    }
+    let ticketParams = [companyId, ticketId];
+    
     const [tickets] = await db.query(ticketQuery, ticketParams);
     if (tickets.length === 0) {
-      console.warn(`Ticket ${ticketId} not found for notifications.`);
+      console.warn(`[NOTIF] Ticket ${ticketId} not found in database search.`);
       return null;
     }
     const ticket = tickets[0];
-    console.log(`Found ticket: ${ticket.subject}, customer: ${ticket.customer_email}`);
+    const actualCompanyId = ticket.company_id || companyId;
+    console.log(`[NOTIF] Found ticket: ${ticket.subject}, customer: ${ticket.customer_email}, actualCompanyId: ${actualCompanyId}`);
 
     const involved = [];
     if (ticket.customer_email) {
@@ -252,11 +249,11 @@ const getTicketInvolvedParties = async (ticketId, companyId, db) => {
         let agentParams = [ticket.agent_id];
         if (process.env.DB_MODE === 'single') {
             agentQuery += ' AND company_id = ?';
-            agentParams.push(companyId);
+            agentParams.push(actualCompanyId);
         }
         const [agents] = await db.query(agentQuery, agentParams);
         if (agents.length > 0 && agents[0].email) {
-            console.log(`Adding agent to notification: ${agents[0].email}`);
+            console.log(`[NOTIF] Adding agent: ${agents[0].email}`);
             involved.push({ email: agents[0].email, name: agents[0].name, role: 'agent' });
         }
     }
@@ -266,12 +263,12 @@ const getTicketInvolvedParties = async (ticketId, companyId, db) => {
     let supervisorParams = [];
     if (process.env.DB_MODE === 'single') {
         supervisorQuery += ' AND company_id = ?';
-        supervisorParams.push(companyId);
+        supervisorParams.push(actualCompanyId);
     }
     const [supervisors] = await db.query(supervisorQuery, supervisorParams);
     supervisors.forEach(s => {
         if (s.email && !involved.some(p => p.email === s.email)) {
-            console.log(`Adding supervisor to notification: ${s.email}`);
+            console.log(`[NOTIF] Adding supervisor: ${s.email}`);
             involved.push({ email: s.email, name: s.name, role: 'supervisor' });
         }
     });
@@ -1229,7 +1226,8 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
     // Handlle notes if provided (assuming for simplicity we just store them in a notes table)
     if (notes && notes.length > 0) {
       const latestNote = notes[notes.length - 1];
-      // Check if note already exists or use more complex logic. For now, just insert the new one
+      
+      // 1. Traceability Table
       await req.db.execute(
         process.env.DB_MODE === 'single'
           ? 'INSERT INTO ticket_notes (company_id, ticket_id, content, is_internal) VALUES (?, ?, ?, ?)'
@@ -1239,7 +1237,25 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
           : [req.params.id, latestNote.text, latestNote.type === 'internal' ? 1 : 0]
       );
       
-      // Notification for note
+      // 2. Legacy Sync (for UI visibility)
+      const [ticketRows] = await req.db.query('SELECT notes FROM tickets WHERE id = ?', [req.params.id]);
+      if (ticketRows.length > 0) {
+        let currentNotes = [];
+        try {
+            currentNotes = typeof ticketRows[0].notes === 'string' ? JSON.parse(ticketRows[0].notes) : (ticketRows[0].notes || []);
+        } catch (e) {
+            currentNotes = [];
+        }
+        // If notes from frontend is the full array, we just use it, otherwise we append
+        const updatedNotes = notes.length > currentNotes.length ? notes : [...currentNotes, latestNote];
+        
+        await req.db.execute(
+          'UPDATE tickets SET notes = ?, updated_at = NOW() WHERE id = ?',
+          [JSON.stringify(updatedNotes), req.params.id]
+        );
+      }
+      
+      // 3. Notification
       await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'new_note', { isInternal: latestNote.type === 'internal' }).catch(err => console.log('[NOTIF ERR] PATCH Note:', err.message));
     }
 
