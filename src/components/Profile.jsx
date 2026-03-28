@@ -70,7 +70,7 @@ const Profile = ({ user, t, onUpdate }) => {
               border: '2px solid var(--bg-main)',
               boxShadow: '0 4px 10px rgba(0,0,0,0.2)'
             }}>
-              📷
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
               <input type="file" accept="image/*" onChange={handlePhotoChange} style={{ display: 'none' }} />
             </label>
           </div>

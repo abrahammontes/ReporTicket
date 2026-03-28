@@ -407,7 +407,7 @@ app.post('/api/notify-registration', async (req, res) => {
     subject: `Nueva Registro: ${userData.name} - ${companyName || 'Sin Empresa'}`,
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #7c3aed; border-radius: 10px;">
-        <h2 style="color: #7c3aed;">🔔 Notificación de Nuevo Registro</h2>
+        <h2 style="color: #7c3aed;">&#x1F514; Notificación de Nuevo Registro</h2>
         <p>Se ha registrado un nuevo usuario en la plataforma:</p>
         <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
           <p style="margin: 5px 0;"><strong>Nombre:</strong> ${userData.name}</p>
