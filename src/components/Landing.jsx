@@ -96,24 +96,25 @@ const Landing = ({ onGetStarted, onLogin, theme, setTheme, t }) => {
           marginBottom: '2rem', 
           fontWeight: '900',
           letterSpacing: '-0.02em',
-          color: theme === 'dark' ? 'transparent' : '#0f172a',
-          background: theme === 'dark' ? 'linear-gradient(135deg, #fff, var(--primary))' : 'none',
+          color: theme === 'dark' ? 'transparent' : '#020617',
+          background: theme === 'dark' ? 'linear-gradient(135deg, #fff 30%, var(--primary) 100%)' : 'none',
           WebkitBackgroundClip: theme === 'dark' ? 'text' : 'unset',
           WebkitTextFillColor: theme === 'dark' ? 'transparent' : 'unset',
           display: 'block',
-          textShadow: theme === 'dark' ? 'none' : '0 2px 20px rgba(248, 250, 252, 0.8)'
+          textShadow: 'none'
         }}>
           {t('heroTitle')}
         </h1>
         <p style={{ 
           fontSize: 'clamp(1rem, 3vw, 1.25rem)', 
-          color: theme === 'dark' ? 'var(--text-muted)' : '#1e293b',
+          color: theme === 'dark' ? '#ffffff' : '#0f172a',
           marginBottom: '4rem',
           maxWidth: '800px',
           margin: '0 auto 4rem',
           lineHeight: '1.6',
           whiteSpace: 'pre-wrap',
-          textShadow: theme === 'dark' ? 'none' : '0 1px 10px rgba(248, 250, 252, 0.9)'
+          fontWeight: '500',
+          textShadow: 'none'
         }}>
           {t('heroSub')}
         </p>
@@ -152,8 +153,8 @@ const Landing = ({ onGetStarted, onLogin, theme, setTheme, t }) => {
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d={feat.icon}></path></svg>
               )}
             </div>
-            <h3 style={{ fontSize: '1.4rem', marginBottom: '1rem', fontWeight: '800', color: theme === 'dark' ? 'var(--text-main)' : '#0f172a', textShadow: theme === 'dark' ? 'none' : '0 1px 8px rgba(248, 250, 252, 0.8)' }}>{feat.title}</h3>
-            <p style={{ color: theme === 'dark' ? 'var(--text-muted)' : '#334155', lineHeight: '1.6', fontSize: '0.95rem', textShadow: theme === 'dark' ? 'none' : '0 1px 6px rgba(248, 250, 252, 0.8)' }}>{feat.sub}</p>
+            <h3 style={{ fontSize: '1.4rem', marginBottom: '1rem', fontWeight: '800', color: theme === 'dark' ? '#ffffff' : '#020617' }}>{feat.title}</h3>
+            <p style={{ color: theme === 'dark' ? '#cbd5e1' : '#1e293b', lineHeight: '1.6', fontSize: '0.95rem', fontWeight: '500' }}>{feat.sub}</p>
           </div>
         ))}
       </div>

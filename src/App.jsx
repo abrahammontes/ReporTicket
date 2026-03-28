@@ -190,7 +190,7 @@ function App() {
                 minWidth: '100vw',
                 minHeight: '56.25vw',
                 transform: 'translate(-50%, -50%) scale(1.1)',
-                opacity: 0.6,
+                opacity: 0.4,
                 filter: 'blur(8px) brightness(0.9)',
                 pointerEvents: 'none'
               }}
