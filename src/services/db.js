@@ -105,12 +105,17 @@ export const dbService = {
   },
 
   addTicket: async (ticket, userName) => {
+    const session = JSON.parse(localStorage.getItem('reporticket_session') || '{}');
+    const companyPrefix = (session.companyName || 'TKT').replace(/[^a-zA-Z0-9]/g, '').substring(0, 13);
+    const randomDigits = Math.floor(100000 + Math.random() * 900000);
+    const customId = `${companyPrefix}-${randomDigits}`;
+
     const response = await fetch(`${API_URL}/tickets`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({
         ...ticket,
-        id: 'tkt-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8),
+        id: customId,
         user_name: userName
       })
     });

@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS company_users (
 );
 
 CREATE TABLE IF NOT EXISTS tickets (
-    id VARCHAR(20) PRIMARY KEY,
+    id VARCHAR(50) PRIMARY KEY,
     company_id VARCHAR(50) NOT NULL,
     subject VARCHAR(255) NOT NULL,
     description TEXT,
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 CREATE TABLE IF NOT EXISTS ticket_notes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     company_id VARCHAR(50) NOT NULL,
-    ticket_id VARCHAR(20),
+    ticket_id VARCHAR(50),
     user_id VARCHAR(50),
     content TEXT NOT NULL,
     is_internal BOOLEAN DEFAULT FALSE,

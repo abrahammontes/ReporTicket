@@ -660,7 +660,10 @@ app.post('/api/login', async (req, res) => {
 
   try {
     const [users] = await masterPool.query(
-      'SELECT user_id, company_id, role, password FROM global_directory WHERE email = ?',
+      'SELECT g.user_id, g.company_id, g.role, g.password, c.name as company_name ' +
+      'FROM global_directory g ' +
+      'LEFT JOIN companies c ON g.company_id = c.id ' +
+      'WHERE g.email = ?',
       [email]
     );
 
@@ -678,7 +681,8 @@ app.post('/api/login', async (req, res) => {
       id: user.user_id, 
       email, 
       role: user.role, 
-      companyId: user.company_id 
+      companyId: user.company_id,
+      companyName: user.company_name
     };
 
     // If company user, fetch more details from company DB
