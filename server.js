@@ -986,6 +986,41 @@ app.post('/api/tickets/:id/notes', withCompanyPool, async (req, res) => {
   }
 });
 
+app.delete('/api/tickets/:id', withCompanyPool, async (req, res) => {
+  try {
+    // Delete notes first
+    await req.db.execute('DELETE FROM ticket_notes WHERE ticket_id = ?', [req.params.id]);
+    // Delete from tickets table
+    const [result] = await req.db.execute('DELETE FROM tickets WHERE id = ?', [req.params.id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+    res.json({ success: true, message: 'Ticket deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/tickets/purge', withCompanyPool, async (req, res) => {
+  const userRole = req.headers['x-user-role'];
+  if (userRole !== 'superadmin') {
+    return res.status(403).json({ success: false, message: 'Unauthorized. Only Superadmins can purge the system.' });
+  }
+
+  try {
+    if (process.env.DB_MODE === 'single') {
+      await req.db.execute('DELETE FROM ticket_notes');
+      await req.db.execute('DELETE FROM tickets');
+      res.json({ success: true, message: 'System purged successfully' });
+    } else {
+      res.status(400).json({ success: false, message: 'Purge only supported in single-DB mode' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 app.get('/api/users', withCompanyPool, async (req, res) => {
   try {
     const userRole = req.headers['x-user-role'];

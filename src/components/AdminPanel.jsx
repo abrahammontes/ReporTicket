@@ -237,6 +237,44 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
     }
   };
 
+  const handleDeleteTicket = async (e, ticketId) => {
+    e.stopPropagation();
+    if (window.confirm(t('confirmDeleteTicket') || '¿Estás seguro de que deseas eliminar este ticket permanentemente?')) {
+      try {
+        const result = await dbService.deleteTicket(ticketId);
+        if (result.success) {
+          // Refresh list via parent update or local fetch if possible
+          // For now, reload to keep it simple and consistent with other deletes
+          window.location.reload(); 
+        } else {
+          alert('Error: ' + result.message);
+        }
+      } catch (err) {
+        alert('Error deleting ticket');
+      }
+    }
+  };
+
+  const handlePurgeSystem = async () => {
+    const confirm1 = window.confirm(t('confirmPurge1') || '¡ADVERTENCIA! Esta acción ELIMINARÁ TODOS los tickets y notas del sistema. ¿Estás seguro?');
+    if (!confirm1) return;
+    
+    const confirm2 = window.confirm(t('confirmPurge2') || '¿REALMENTE deseas borrar TODO? Esta acción no se puede deshacer.');
+    if (!confirm2) return;
+
+    try {
+      const result = await dbService.purgeTickets();
+      if (result.success) {
+        alert(t('purgeSuccess') || 'Sistema limpiado correctamente.');
+        window.location.reload();
+      } else {
+        alert('Error: ' + result.message);
+      }
+    } catch (err) {
+      alert('Error purging system');
+    }
+  };
+
   const handleOpenPermissions = (userToEdit) => {
     let perms = userToEdit.permissions;
     if (typeof perms === 'string') {
@@ -326,6 +364,9 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
                   <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('user')}</th>
                   <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('priority')}</th>
                   <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('status')}</th>
+                  {user.role === 'superadmin' && (
+                    <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('actions')}</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -340,6 +381,17 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
                      <td style={{ padding: '1rem' }}>
                       <span className={`badge badge-${ticket.status}`}>{t(ticket.status)}</span>
                      </td>
+                     {user.role === 'superadmin' && (
+                       <td style={{ padding: '1rem' }}>
+                         <button 
+                           onClick={(e) => handleDeleteTicket(e, ticket.id)}
+                           style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', padding: '0.25rem' }}
+                           title={t('delete')}
+                         >
+                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                         </button>
+                       </td>
+                     )}
                   </tr>
                 ))}
               </tbody>
@@ -557,6 +609,27 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
               </button>
             </div>
           </form>
+
+          {user.role === 'superadmin' && systemInfo.dbMode === 'single' && (
+            <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '2px dashed var(--border-color)' }}>
+              <h3 style={{ color: '#ef4444', fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                {t('dangerZone') || 'Zona de Peligro'}
+              </h3>
+              <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '1.5rem', borderRadius: '0.75rem' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+                  {t('purgeWarning') || 'Esta acción eliminará permanentemente todos los tickets y notas de la base de datos de todas las empresas. No se puede deshacer.'}
+                </p>
+                <button 
+                  onClick={handlePurgeSystem}
+                  className="btn-primary" 
+                  style={{ background: '#ef4444', border: 'none', width: '100%', padding: '1rem' }}
+                >
+                  {t('cleanSystem') || 'Limpiar Sistema (Borrar Todo)'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>

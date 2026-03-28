@@ -133,6 +133,22 @@ export const dbService = {
     return await response.json();
   },
 
+  deleteTicket: async (id) => {
+    const response = await fetch(`${API_URL}/tickets/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    return await response.json();
+  },
+
+  purgeTickets: async () => {
+    const response = await fetch(`${API_URL}/tickets/purge`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    return await response.json();
+  },
+
   // Profile & User Management
   updateUserProfile: async (userId, updates) => {
     const response = await fetch(`${API_URL}/users/${userId}`, {
