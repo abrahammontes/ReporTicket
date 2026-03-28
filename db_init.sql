@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS system_users (
 CREATE TABLE IF NOT EXISTS global_directory (
     email VARCHAR(255) PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL,
+    name VARCHAR(255),
     company_id VARCHAR(50),
     password VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL,

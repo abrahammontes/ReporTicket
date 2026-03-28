@@ -489,8 +489,8 @@ app.post('/api/register-company', async (req, res) => {
 
       // 5. Sync with global directory
       await masterPool.execute(
-        'INSERT INTO global_directory (email, user_id, company_id, password, role) VALUES (?, ?, ?, ?, ?)',
-        [adminUser.email, adminId, companyId, adminUser.password, 'admin']
+        'INSERT INTO global_directory (email, user_id, name, company_id, password, role) VALUES (?, ?, ?, ?, ?, ?)',
+        [adminUser.email, adminId, adminUser.name, companyId, adminUser.password, 'admin']
       );
 
       if (!isSingle) await targetPool.end();
@@ -642,25 +642,27 @@ app.get('/api/users', withCompanyPool, async (req, res) => {
 app.post('/api/users', withCompanyPool, async (req, res) => {
   const { id, name, email, password, role, permissions } = req.body;
   const companyId = req.companyId;
+  const userId = id; // Use id from req.body as userId
+  const hashedPassword = password; // Assuming password is already hashed or will be hashed before this point
 
   try {
     // 1. Insert into company DB (or master if single)
     if (process.env.DB_MODE === 'single') {
       await req.db.execute(
         'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, companyId, name, email, password, role, JSON.stringify(permissions)]
+        [userId, companyId, name, email, hashedPassword, role, JSON.stringify(permissions)]
       );
     } else {
       await req.db.execute(
         'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
-        [id, name, email, password, role, JSON.stringify(permissions)]
+        [userId, name, email, hashedPassword, role, JSON.stringify(permissions)]
       );
     }
 
     // 2. Sync with global directory
     await masterPool.execute(
-      'INSERT INTO global_directory (email, user_id, company_id, password, role) VALUES (?, ?, ?, ?, ?)',
-      [email, id, companyId, password, role]
+      'INSERT INTO global_directory (email, user_id, name, company_id, password, role) VALUES (?, ?, ?, ?, ?, ?)',
+      [email, userId, name, req.companyId, hashedPassword, role]
     );
 
     res.json({ success: true, message: 'User registered successfully' });
@@ -709,7 +711,7 @@ app.delete('/api/companies/:id', async (req, res) => {
 // Global Users (Master Pool - for Super Admin)
 app.get('/api/global-users', async (req, res) => {
   try {
-    const [users] = await masterPool.query('SELECT * FROM global_directory');
+    const [users] = await masterPool.query('SELECT user_id AS id, name, email, role, company_id FROM global_directory');
     res.json({ success: true, users });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
