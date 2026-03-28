@@ -988,10 +988,11 @@ app.post('/api/tickets/:id/notes', withCompanyPool, async (req, res) => {
 
 app.get('/api/users', withCompanyPool, async (req, res) => {
   try {
-    const query = process.env.DB_MODE === 'single'
-      ? 'SELECT id, name, email, role, phone, extension, photo, permissions FROM company_users WHERE company_id = ?'
-      : 'SELECT id, name, email, role, phone, extension, photo, permissions FROM company_users';
-    const params = process.env.DB_MODE === 'single' ? [req.companyId] : [];
+    const userRole = req.headers['x-user-role'];
+    const query = (process.env.DB_MODE === 'single' && userRole !== 'superadmin')
+      ? 'SELECT id, company_id, name, email, role, phone, extension, photo, permissions FROM company_users WHERE company_id = ?'
+      : 'SELECT id, company_id, name, email, role, phone, extension, photo, permissions FROM company_users';
+    const params = (process.env.DB_MODE === 'single' && userRole !== 'superadmin') ? [req.companyId] : [];
     
     const [users] = await req.db.query(query, params);
     const parsedUsers = users.map(u => ({
