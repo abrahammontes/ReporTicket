@@ -12,6 +12,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
   const [isInternal, setIsInternal] = useState(false);
   const [pendingUpdates, setPendingUpdates] = useState({});
   const [showSuccess, setShowSuccess] = useState(false);
+  const [agents, setAgents] = useState([]);
 
   // Ref for auto-resize
   const textareaRef = useRef(null);
@@ -24,6 +25,16 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
       textareaRef.current.style.height = Math.max(120, scrollHeight) + 'px';
     }
   }, [newNote]);
+
+  useEffect(() => {
+    if (userRole === 'admin' || userRole === 'supervisor' || userRole === 'superadmin') {
+      dbService.getUsers().then(users => {
+        // Filter for agents/supervisors/admins
+        const filteredAgents = users.filter(u => ['admin', 'supervisor', 'superadmin'].includes(u.role));
+        setAgents(filteredAgents);
+      });
+    }
+  }, [userRole]);
 
   // Closure Ritual States
   const [isClosingRitual, setIsClosingRitual] = useState(false);
@@ -302,7 +313,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '0.25rem', letterSpacing: '0.02em' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
                       {t('quickResponses').toUpperCase()}
                     </label>
                     <select 
@@ -537,6 +548,23 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                   <option value="accountsPayable">{t('departmentAccountsPayable')}</option>
                 </select>
               </div>
+
+              {(userRole === 'admin' || userRole === 'supervisor' || userRole === 'superadmin') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{t('assignTo') || 'Asignar a'}</label>
+                  <select
+                    value={pendingUpdates.agent_id !== undefined ? pendingUpdates.agent_id : (localTicket.agent_id || '')}
+                    onChange={(e) => handleFieldChange('agent_id', e.target.value)}
+                    style={{ width: '100%', opacity: isRestricted ? 0.6 : 1, cursor: isRestricted ? 'not-allowed' : 'pointer' }}
+                    disabled={isRestricted}
+                  >
+                    <option value="">{t('unassigned') || 'Sin Asignar'}</option>
+                    {agents.map(agent => (
+                      <option key={agent.id} value={agent.id}>{agent.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div style={{ marginTop: '0.5rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{t('user')}</p>

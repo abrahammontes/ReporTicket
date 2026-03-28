@@ -7,7 +7,9 @@ const getHeaders = () => {
   const session = JSON.parse(localStorage.getItem('reporticket_session') || '{}');
   return {
     'Content-Type': 'application/json',
-    'X-Company-ID': session.companyId || 'master'
+    'X-Company-ID': session.companyId || 'master',
+    'X-User-ID': session.id || '',
+    'X-User-Role': session.role || ''
   };
 };
 

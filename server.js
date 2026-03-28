@@ -553,11 +553,31 @@ app.post('/api/login', async (req, res) => {
 
 // Ticket Endpoints
 app.get('/api/tickets', withCompanyPool, async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  const userRole = req.headers['x-user-role'];
+
   try {
-    const query = process.env.DB_MODE === 'single' 
-      ? 'SELECT * FROM tickets WHERE company_id = ? ORDER BY created_at DESC'
-      : 'SELECT * FROM tickets ORDER BY created_at DESC';
-    const params = process.env.DB_MODE === 'single' ? [req.companyId] : [];
+    let query = 'SELECT * FROM tickets';
+    let params = [];
+    let conditions = [];
+
+    if (process.env.DB_MODE === 'single') {
+      conditions.push('company_id = ?');
+      params.push(req.companyId);
+    }
+
+    // Role-based filtering
+    if (userRole === 'customer') {
+      conditions.push('user_id = ?');
+      params.push(userId);
+    }
+    // Supervisors and Admins see all for the company (handled by withCompanyPool/conditions)
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    query += ' ORDER BY created_at DESC';
     
     const [tickets] = await req.db.query(query, params);
     res.json({ success: true, tickets });

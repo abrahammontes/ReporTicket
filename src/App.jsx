@@ -54,16 +54,8 @@ function App() {
   }, [currentUser]);
   
   const visibleTickets = React.useMemo(() => {
-    if (!currentUser) return [];
-    if (userRole === 'superadmin') return allTickets;
-    
-    if (currentUser.permissions?.viewAllTickets) {
-      const companyUserNames = allUsers.filter(u => u.companyId === currentUser.companyId).map(u => u.name);
-      return allTickets.filter(t => companyUserNames.includes(t.user) || t.user === currentUser.name);
-    }
-    
-    return allTickets.filter(t => t.user === currentUser.name);
-  }, [allTickets, allUsers, currentUser, userRole]);
+    return allTickets || [];
+  }, [allTickets]);
   const [authError, setAuthError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
