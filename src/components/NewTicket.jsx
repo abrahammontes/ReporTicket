@@ -58,7 +58,7 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
             <input 
               type="text" 
               placeholder={t('yourName')} 
-              value={formData.name}
+              value={user?.name || ''}
               disabled
               style={{ background: 'var(--bg-hover)', cursor: 'not-allowed', opacity: 0.7 }}
             />
@@ -68,7 +68,7 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
             <input 
               type="email" 
               placeholder={t('emailAddress')} 
-              value={formData.email}
+              value={user?.email || ''}
               disabled
               style={{ background: 'var(--bg-hover)', cursor: 'not-allowed', opacity: 0.7 }}
             />
