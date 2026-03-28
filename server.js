@@ -218,7 +218,170 @@ const withCompanyPool = async (req, res, next) => {
 };
 
 
+
+// Ticket Notification Helpers
+const getTicketInvolvedParties = async (ticketId, companyId, db) => {
+  try {
+    console.log(`Searching involved parties for ticket ${ticketId} in company ${companyId}`);
+    // 1. Get Ticket and Customer info
+    let ticketQuery = 'SELECT t.subject, t.user_id, t.agent_id, u.email as customer_email, u.name as customer_name ' +
+                      'FROM tickets t ' +
+                      'LEFT JOIN company_users u ON t.user_id = u.id ' +
+                      'WHERE t.id = ?';
+    let ticketParams = [ticketId];
+    if (process.env.DB_MODE === 'single') {
+        ticketQuery += ' AND t.company_id = ?';
+        ticketParams.push(companyId);
+    }
+    const [tickets] = await db.query(ticketQuery, ticketParams);
+    if (tickets.length === 0) {
+      console.warn(`Ticket ${ticketId} not found for notifications.`);
+      return null;
+    }
+    const ticket = tickets[0];
+    console.log(`Found ticket: ${ticket.subject}, customer: ${ticket.customer_email}`);
+
+    const involved = [];
+    if (ticket.customer_email) {
+      involved.push({ email: ticket.customer_email, name: ticket.customer_name, role: 'customer' });
+    }
+
+    // 2. Get Agent info if assigned
+    if (ticket.agent_id) {
+        let agentQuery = 'SELECT email, name FROM company_users WHERE id = ?';
+        let agentParams = [ticket.agent_id];
+        if (process.env.DB_MODE === 'single') {
+            agentQuery += ' AND company_id = ?';
+            agentParams.push(companyId);
+        }
+        const [agents] = await db.query(agentQuery, agentParams);
+        if (agents.length > 0 && agents[0].email) {
+            console.log(`Adding agent to notification: ${agents[0].email}`);
+            involved.push({ email: agents[0].email, name: agents[0].name, role: 'agent' });
+        }
+    }
+
+    // 3. Get Supervisors info
+    let supervisorQuery = "SELECT email, name FROM company_users WHERE role = 'supervisor'";
+    let supervisorParams = [];
+    if (process.env.DB_MODE === 'single') {
+        supervisorQuery += ' AND company_id = ?';
+        supervisorParams.push(companyId);
+    }
+    const [supervisors] = await db.query(supervisorQuery, supervisorParams);
+    supervisors.forEach(s => {
+        if (s.email && !involved.some(p => p.email === s.email)) {
+            console.log(`Adding supervisor to notification: ${s.email}`);
+            involved.push({ email: s.email, name: s.name, role: 'supervisor' });
+        }
+    });
+
+    return {
+        subject: ticket.subject,
+        parties: involved
+    };
+  } catch (err) {
+    console.error('Error getting involved parties:', err);
+    return null;
+  }
+};
+
+const sendTicketEmailNotification = async (ticketId, companyId, db, updateType, updateDetails = {}) => {
+  try {
+    console.log(`[NOTIF] Triggered for Ticket: ${ticketId}, Company: ${companyId}, Type: ${updateType}`);
+    const settings = await getSystemSettings();
+    const config = settings.smtpConfig || {};
+    if (!config || !config.smtpHost) {
+      console.warn(`[NOTIF] SMTP not configured in global_settings. Skipping notification for ${ticketId}.`);
+      return;
+    }
+    console.log(`[NOTIF] Using SMTP: ${config.smtpHost}:${config.smtpPort} (${config.smtpUser})`);
+
+    const data = await getTicketInvolvedParties(ticketId, companyId, db);
+    if (!data || data.parties.length === 0) {
+      console.warn('No involved parties found for ticket:', ticketId);
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: config.smtpHost,
+      port: parseInt(config.smtpPort),
+      secure: config.smtpSecure,
+      auth: { user: config.smtpUser, pass: config.smtpPass },
+      tls: { rejectUnauthorized: false }
+    });
+
+    const timestamp = new Date().toLocaleString('es-MX', { 
+        timeZone: 'America/Mexico_City',
+        dateStyle: 'long',
+        timeStyle: 'medium'
+    });
+
+    for (const party of data.parties) {
+        let title = '';
+        let body = '';
+        
+        switch (updateType) {
+            case 'new_ticket':
+                title = 'Nuevo Ticket Registrado';
+                body = `Se ha creado el ticket <strong>#${ticketId}</strong> con el asunto: <em>${data.subject}</em>.`;
+                break;
+            case 'status_change':
+                title = 'Actualización de Estado';
+                body = `El ticket <strong>#${ticketId}</strong> ha cambiado su estado a <strong>${updateDetails.newStatus || 'actualizado'}</strong>.`;
+                break;
+            case 'new_note':
+                if (updateDetails.isInternal && party.role === 'customer') continue; 
+                title = 'Nueva Respuesta en Ticket';
+                body = `Se ha añadido una nueva respuesta al ticket <strong>#${ticketId}</strong>.`;
+                break;
+            default:
+                title = 'Actualización de Ticket';
+                body = `Se ha realizado una modificación en el ticket <strong>#${ticketId}</strong>.`;
+        }
+
+        const mailOptions = {
+            from: `"ReporTicket Notificaciones" <${config.smtpUser}>`,
+            to: party.email,
+            subject: `[${ticketId}] ${title}: ${data.subject}`,
+            html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; color: #333;">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <h1 style="color: #6366f1; margin: 0;">ReporTicket</h1>
+                        <p style="color: #666; font-size: 0.9rem;">Gestión de Servicios Administrados</p>
+                    </div>
+                    <h2 style="color: #1f2937; border-bottom: 2px solid #f3f4f6; padding-bottom: 10px;">${title}</h2>
+                    <p>Hola <strong>${party.name}</strong>,</p>
+                    <p style="line-height: 1.5;">${body}</p>
+                    
+                    <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #6366f1; margin: 20px 0;">
+                        <p style="margin: 0; font-size: 0.9rem; color: #4b5563;">
+                            <strong>Estampado de tiempo oficial:</strong><br>
+                            ${timestamp}
+                        </p>
+                    </div>
+
+                    <p style="font-size: 0.85rem; color: #9ca3af; margin-top: 30px; border-top: 1px solid #f3f4f6; padding-top: 15px;">
+                        Este es un correo automático generado por el sistema de trazabilidad de ReporTicket. 
+                        No es necesario responder a esta dirección.
+                    </p>
+                </div>
+            `
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (mailErr) {
+            console.error(`Failed to send email to ${party.email}:`, mailErr.message);
+        }
+    }
+  } catch (err) {
+    console.error('Notification system error:', err);
+  }
+};
+
 app.post('/api/send-test-email', async (req, res) => {
+
   const { smtpHost, smtpPort, smtpUser, smtpPass, smtpSecure, testEmail } = req.body;
 
   if (!smtpHost || !smtpPort || !smtpUser || !smtpPass || !testEmail) {
@@ -616,6 +779,16 @@ app.post('/api/register-company', async (req, res) => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES company_users(id)
         );
+        CREATE TABLE IF NOT EXISTS ticket_notes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ticket_id VARCHAR(20) NOT NULL,
+            company_id VARCHAR(50),
+            user_id VARCHAR(50),
+            content TEXT NOT NULL,
+            is_internal TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ticket_id) REFERENCES tickets(id)
+        );
       `;
 
       if (initSql) await targetPool.query(initSql);
@@ -763,6 +936,10 @@ app.post('/api/tickets', withCompanyPool, async (req, res) => {
     query += ') VALUES ' + values + ')';
     
     await req.db.execute(query, params);
+    
+    // Notification
+    await sendTicketEmailNotification(id, req.companyId, req.db, 'new_ticket').catch(err => console.error('[NOTIF ERR] Create:', err.message));
+
     res.json({ success: true, message: 'Ticket created successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -776,6 +953,10 @@ app.put('/api/tickets/:id', withCompanyPool, async (req, res) => {
       'UPDATE tickets SET status = ?, agent_id = ?, updated_at = NOW() WHERE id = ?',
       [status, agent_id || null, req.params.id]
     );
+
+    // Notification
+    await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'status_change', { newStatus: status }).catch(err => console.error('[NOTIF ERR] Status Update:', err.message));
+
     res.json({ success: true, message: 'Ticket updated' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -789,6 +970,10 @@ app.post('/api/tickets/:id/notes', withCompanyPool, async (req, res) => {
       'INSERT INTO ticket_notes (ticket_id, company_id, user_id, content, is_internal) VALUES (?, ?, ?, ?, ?)',
       [req.params.id, req.companyId, user_id || null, content, is_internal ? 1 : 0]
     );
+
+    // Notification
+    await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'new_note', { isInternal: is_internal }).catch(err => console.error('[NOTIF ERR] New Note:', err.message));
+
     res.json({ success: true, message: 'Note added' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1036,6 +1221,11 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
       await req.db.execute(query, params);
     }
 
+    // Notification for updates (status/priority/dept)
+    if (status || priority || department) {
+        await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'status_change', { newStatus: status }).catch(err => console.log('[NOTIF ERR] PATCH Update:', err.message));
+    }
+
     // Handlle notes if provided (assuming for simplicity we just store them in a notes table)
     if (notes && notes.length > 0) {
       const latestNote = notes[notes.length - 1];
@@ -1045,9 +1235,12 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
           ? 'INSERT INTO ticket_notes (company_id, ticket_id, content, is_internal) VALUES (?, ?, ?, ?)'
           : 'INSERT INTO ticket_notes (ticket_id, content, is_internal) VALUES (?, ?, ?)',
         process.env.DB_MODE === 'single'
-          ? [req.companyId, req.params.id, latestNote.text, latestNote.type === 'internal']
-          : [req.params.id, latestNote.text, latestNote.type === 'internal']
+          ? [req.companyId, req.params.id, latestNote.text, latestNote.type === 'internal' ? 1 : 0]
+          : [req.params.id, latestNote.text, latestNote.type === 'internal' ? 1 : 0]
       );
+      
+      // Notification for note
+      await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'new_note', { isInternal: latestNote.type === 'internal' }).catch(err => console.log('[NOTIF ERR] PATCH Note:', err.message));
     }
 
     res.json({ success: true, message: 'Ticket updated' });
