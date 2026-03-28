@@ -84,6 +84,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
       });
       const updated = await dbService.getCompanies();
       setCompanies(updated);
+      await fetchUsers();
       setNewCompanyName('');
       setNewAdminName('');
       setNewAdminEmail('');

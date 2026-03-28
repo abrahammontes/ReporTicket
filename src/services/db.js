@@ -110,7 +110,7 @@ export const dbService = {
       headers: getHeaders(),
       body: JSON.stringify({
         ...ticket,
-        id: (Date.now() % 10000).toString(),
+        id: 'tkt-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 8),
         user_name: userName
       })
     });

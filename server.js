@@ -4,6 +4,7 @@ import cors from 'cors';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -19,6 +20,7 @@ app.use(express.json());
 // Master Database Initial Configuration
 let dbConfig = {
   host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT) || 3306,
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASS || '',
   database: process.env.DB_NAME || 'reporticket_master',
@@ -28,7 +30,11 @@ let dbConfig = {
 
 // Master Database Pool
 let masterPool = mysql.createPool({
-  ...dbConfig,
+  host: dbConfig.host,
+  port: dbConfig.port,
+  user: dbConfig.user,
+  password: dbConfig.password,
+  database: dbConfig.database,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
@@ -40,6 +46,7 @@ const updateMasterPool = (newConfig) => {
   dbConfig = { ...dbConfig, ...newConfig };
   masterPool = mysql.createPool({
     host: dbConfig.host,
+    port: dbConfig.port || 3306,
     user: dbConfig.user,
     password: dbConfig.password,
     database: dbConfig.database,
@@ -81,6 +88,7 @@ const getCompanyPool = async (companyId) => {
   const dbName = companies[0].db_name;
   const pool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT) || 3306,
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASS || '',
     database: dbName,
@@ -168,10 +176,11 @@ app.post('/api/send-test-email', async (req, res) => {
 });
 
 app.post('/api/settings/database/test', async (req, res) => {
-  const { host, user, password, database } = req.body;
+  const { host, port, user, password, database } = req.body;
   try {
     const testPool = mysql.createPool({
       host,
+      port: parseInt(port) || 3306,
       user,
       password,
       database,
@@ -187,14 +196,14 @@ app.post('/api/settings/database/test', async (req, res) => {
 });
 
 app.post('/api/settings/database/save', async (req, res) => {
-  const { host, user, password, database, mode } = req.body;
+  const { host, port, user, password, database, mode } = req.body;
   try {
     // 1. Update In-Memory Config and Pool
-    updateMasterPool({ host, user, password, database, mode });
+    updateMasterPool({ host, port: parseInt(port) || 3306, user, password, database, mode });
     
     // 2. Persist to DB if possible (for future restarts)
     try {
-      const configJson = JSON.stringify({ host, user, password, database, mode });
+      const configJson = JSON.stringify({ host, port: parseInt(port) || 3306, user, password, database, mode });
       await masterPool.execute(
         'INSERT INTO global_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
         ['dbConfig', configJson, configJson]
@@ -263,7 +272,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       tls: { rejectUnauthorized: false }
     });
 
-    const resetUrl = `http://localhost:5173/reset-password?token=${token}`;
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
     
     await transporter.sendMail({
       from: `"ReporTicket" <${smtp.smtpUser}>`,
@@ -300,10 +310,11 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
     const user = users[0];
 
-    // 2. Update password in Global Directory
+    // 2. Hash and update password in Global Directory
+    const hashedPassword = await bcrypt.hash(password, 10);
     await masterPool.execute(
       'UPDATE global_directory SET password = ?, reset_token = NULL, reset_expires = NULL WHERE email = ?',
-      [password, user.email]
+      [hashedPassword, user.email]
     );
 
     // 3. Update password in Company Tables
@@ -311,9 +322,9 @@ app.post('/api/auth/reset-password', async (req, res) => {
       const pool = await getCompanyPool(user.company_id);
       if (pool) {
         if (process.env.DB_MODE === 'single') {
-          await pool.execute('UPDATE company_users SET password = ? WHERE id = ? AND company_id = ?', [password, user.user_id, user.company_id]);
+          await pool.execute('UPDATE company_users SET password = ? WHERE id = ? AND company_id = ?', [hashedPassword, user.user_id, user.company_id]);
         } else {
-          await pool.execute('UPDATE company_users SET password = ? WHERE id = ?', [password, user.user_id]);
+          await pool.execute('UPDATE company_users SET password = ? WHERE id = ?', [hashedPassword, user.user_id]);
         }
       }
     }
@@ -423,6 +434,8 @@ app.post('/api/notify-registration', async (req, res) => {
 
 app.post('/api/register-company', async (req, res) => {
   const { name, adminUser } = req.body;
+  console.log('Registering company:', name);
+  console.log('Admin user data:', adminUser);
   const companyId = 'comp-' + Date.now();
   const dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
 
@@ -442,6 +455,7 @@ app.post('/api/register-company', async (req, res) => {
     const isSingle = process.env.DB_MODE === 'single';
     const targetPool = isSingle ? masterPool : mysql.createPool({
       host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 3306,
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASS || '',
       database: dbName,
@@ -475,22 +489,24 @@ app.post('/api/register-company', async (req, res) => {
 
       // 4. Create the initial admin user
       const adminId = 'user-' + Date.now();
+      const defaultPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
+      const hashedAdminPassword = await bcrypt.hash(adminUser.password, 10);
       if (isSingle) {
         await targetPool.execute(
-          'INSERT INTO company_users (id, company_id, name, email, password, role) VALUES (?, ?, ?, ?, ?, ?)',
-          [adminId, companyId, adminUser.name, adminUser.email, adminUser.password, 'admin']
+          'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [adminId, companyId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
         );
       } else {
         await targetPool.execute(
-          'INSERT INTO company_users (id, name, email, password, role) VALUES (?, ?, ?, ?, ?)',
-          [adminId, adminUser.name, adminUser.email, adminUser.password, 'admin']
+          'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
+          [adminId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
         );
       }
 
       // 5. Sync with global directory
       await masterPool.execute(
         'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [adminUser.email, adminId, adminUser.name, companyId, JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false }), adminUser.password, 'admin']
+        [adminUser.email, adminId, adminUser.name, companyId, defaultPermissions, hashedAdminPassword, 'admin']
       );
 
       if (!isSingle) await targetPool.end();
@@ -515,7 +531,12 @@ app.post('/api/login', async (req, res) => {
       [email]
     );
 
-    if (users.length === 0 || users[0].password !== password) {
+    if (users.length === 0) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, users[0].password);
+    if (!passwordMatch) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
@@ -642,8 +663,8 @@ app.get('/api/users', withCompanyPool, async (req, res) => {
 app.post('/api/users', withCompanyPool, async (req, res) => {
   const { id, name, email, password, role, permissions } = req.body;
   const companyId = req.companyId;
-  const userId = id; // Use id from req.body as userId
-  const hashedPassword = password; // Assuming password is already hashed or will be hashed before this point
+  const userId = id;
+  const hashedPassword = await bcrypt.hash(password, 10);
 
   try {
     // 1. Insert into company DB (or master if single)
