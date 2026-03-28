@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Logo from './Logo';
 
-const Layout = ({ children, currentView, setView, onCreateTicket, language, setLanguage, theme, setTheme, userRole, setUserRole, user, onLogout, t }) => {
+const Layout = ({ children, currentView, setView, onCreateTicket, language, setLanguage, theme, setTheme, userRole, setUserRole, user, onLogout, t, dbHealth }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   return (
@@ -179,8 +179,36 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
           </ul>
         </nav>
         
-        <div style={{ position: 'absolute', bottom: '2rem', left: '2rem', right: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-           <div className="glass-panel" style={{ 
+        <div style={{ position: 'absolute', bottom: '2rem', left: '2rem', right: '2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {user?.role === 'superadmin' && dbHealth && (
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.6rem', 
+              padding: '0.75rem', 
+              background: 'rgba(0,0,0,0.15)', 
+              borderRadius: '0.75rem',
+              border: '1px solid var(--border-color)',
+              animation: 'fadeIn 0.5s ease'
+            }}>
+              <div style={{ 
+                width: '8px', 
+                height: '8px', 
+                borderRadius: '50%', 
+                background: dbHealth.status === 'healthy' ? (dbHealth.latency > 300 ? '#facc15' : '#10b981') : '#ef4444',
+                boxShadow: dbHealth.status === 'healthy' && dbHealth.latency <= 300 ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none',
+                transition: 'all 0.3s ease'
+              }}></div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('dbStatus')}</span>
+                  {dbHealth.latency > 0 && <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '600' }}>{dbHealth.latency}ms</span>}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-main)', fontWeight: '500' }}>{t(dbHealth.status)}</div>
+              </div>
+            </div>
+          )}
+          <div className="glass-panel" style={{ 
             padding: '1rem', 
             display: 'flex', 
             flexDirection: 'column', 

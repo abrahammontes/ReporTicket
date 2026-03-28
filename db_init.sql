@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS company_users (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     password VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'supervisor', 'customer') DEFAULT 'customer',
+    role ENUM('admin', 'supervisor', 'agent', 'customer') DEFAULT 'customer',
     phone VARCHAR(20),
     extension VARCHAR(10),
     photo LONGTEXT,

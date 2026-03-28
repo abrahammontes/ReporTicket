@@ -23,6 +23,7 @@ function App() {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [userRole, setUserRole] = useState('customer');
   const [isLoaded, setIsLoaded] = useState(false);
+  const [dbHealth, setDbHealth] = useState({ status: 'unknown', latency: 0 });
 
   // Initialize session
   useEffect(() => {
@@ -50,6 +51,17 @@ function App() {
     if (currentUser) {
       dbService.getTickets().then(setAllTickets).catch(console.error);
       dbService.getUsers().then(setAllUsers).catch(console.error);
+      
+      const check = () => {
+        dbService.checkHealth()
+          .then(setDbHealth)
+          .catch(err => {
+            setDbHealth({ status: 'offline', latency: 0, error: err.message });
+          });
+      };
+      check();
+      const interval = setInterval(check, 60000);
+      return () => clearInterval(interval);
     }
   }, [currentUser]);
   
@@ -145,7 +157,7 @@ function App() {
     const isPublicView = ['landing', 'register', 'login', 'resetPassword'].includes(view);
     
     let publicContent = null;
-    if (view === 'landing') publicContent = <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} theme={theme} t={t} />;
+    if (view === 'landing') publicContent = <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} theme={theme} setTheme={setTheme} t={t} />;
     if (view === 'register') publicContent = <Register onRegister={handleRegister} onLogin={() => handleViewChange('login')} onBack={() => handleViewChange('landing')} t={t} error={authError} />;
     if (view === 'login') publicContent = <Login onLogin={handleLogin} onRegister={() => handleViewChange('register')} onBack={() => handleViewChange('landing')} theme={theme} t={t} error={authError} successMsg={successMsg} />;
     if (view === 'resetPassword') publicContent = <ResetPassword theme={theme} t={t} onBack={() => handleViewChange('login')} />;
@@ -178,8 +190,8 @@ function App() {
                 minWidth: '100vw',
                 minHeight: '56.25vw',
                 transform: 'translate(-50%, -50%) scale(1.1)',
-                opacity: 0.4,
-                filter: 'blur(12px) brightness(0.8)',
+                opacity: 0.6,
+                filter: 'blur(8px) brightness(0.9)',
                 pointerEvents: 'none'
               }}
             ></iframe>
@@ -241,6 +253,7 @@ function App() {
         userRole={userRole}
         setUserRole={setUserRole}
         user={currentUser}
+        dbHealth={dbHealth}
         onLogout={() => { dbService.setSession(null); setCurrentUser(null); handleViewChange('landing'); }}
         t={t}
       >

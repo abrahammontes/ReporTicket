@@ -201,6 +201,13 @@ export const dbService = {
     });
     return await response.json();
   },
+  
+  checkHealth: async () => {
+    const response = await fetch(`${API_URL}/health-check`, {
+      headers: getHeaders()
+    });
+    return await response.json();
+  },
 
   testDatabaseConnection: async (config) => {
     const response = await fetch(`${API_URL}/settings/database/test`, {

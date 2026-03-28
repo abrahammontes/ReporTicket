@@ -36,6 +36,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
   
   const [dbConfigForm, setDbConfigForm] = useState({
     host: '',
+    port: '3306',
     user: '',
     password: '',
     database: '',
@@ -56,8 +57,9 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
         setDbConfigForm(prev => ({
           ...prev,
           host: info.dbHost || 'localhost',
+          port: info.dbPort || '3306',
           mode: info.dbMode || 'single',
-          database: info.dbPrefix ? info.dbPrefix + 'reporticket_master' : 'reporticket_master',
+          database: info.dbName || 'reporticket_master',
           user: info.dbUser || 'root'
         }));
       });
@@ -236,9 +238,19 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
   };
 
   const handleOpenPermissions = (userToEdit) => {
+    let perms = userToEdit.permissions;
+    if (typeof perms === 'string') {
+      try {
+        perms = JSON.parse(perms);
+      } catch (e) {
+        console.error('Error parsing permissions:', e);
+        perms = null;
+      }
+    }
+    
     setPermissionsModalUser({
       ...userToEdit,
-      permissions: userToEdit.permissions || {
+      permissions: perms || {
         viewAllTickets: false,
         assignTickets: false,
         manageUsers: false,
@@ -481,9 +493,15 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
               </div>
             )}
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('dbHost')}</label>
-              <input type="text" value={dbConfigForm.host} onChange={e => setDbConfigForm({...dbConfigForm, host: e.target.value})} placeholder="localhost" required />
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <div style={{ flex: 3 }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('dbHost')}</label>
+                <input type="text" value={dbConfigForm.host} onChange={e => setDbConfigForm({...dbConfigForm, host: e.target.value})} placeholder="localhost" required />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('dbPort') || 'Port'}</label>
+                <input type="text" value={dbConfigForm.port} onChange={e => setDbConfigForm({...dbConfigForm, port: e.target.value})} placeholder="3306" required />
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '1rem' }}>
@@ -709,6 +727,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
                           <td style={{ padding: '1rem' }}>
                             <select value={editUserForm.role} onChange={e => setEditUserForm(f => ({...f, role: e.target.value}))} style={{ padding: '0.4rem' }}>
                               <option value="customer">{t('roles.customer')}</option>
+                              <option value="agent">{t('roles.agent')}</option>
                               <option value="supervisor">{t('roles.supervisor')}</option>
                               <option value="admin">{t('roles.admin')}</option>
                               <option value="superadmin">{t('roles.superadmin')}</option>

@@ -27,10 +27,10 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
   }, [newNote]);
 
   useEffect(() => {
-    if (userRole === 'admin' || userRole === 'supervisor' || userRole === 'superadmin') {
+    if (userRole === 'admin' || userRole === 'supervisor' || userRole === 'superadmin' || userRole === 'agent') {
       dbService.getUsers().then(users => {
         // Filter for agents/supervisors/admins
-        const filteredAgents = users.filter(u => ['admin', 'supervisor', 'superadmin'].includes(u.role));
+        const filteredAgents = users.filter(u => ['admin', 'supervisor', 'superadmin', 'agent'].includes(u.role));
         setAgents(filteredAgents);
       });
     }
@@ -447,7 +447,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {userRole === 'admin' && (
+                  {(userRole === 'admin' || userRole === 'supervisor' || userRole === 'agent') && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
                       <input type="checkbox" checked={isInternal} onChange={(e) => setIsInternal(e.target.checked)} />
                       {t('internalNotes')}
@@ -549,7 +549,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 </select>
               </div>
 
-              {(userRole === 'admin' || userRole === 'supervisor' || userRole === 'superadmin') && (
+              {(userRole === 'admin' || userRole === 'supervisor' || userRole === 'superadmin' || userRole === 'agent') && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{t('assignTo') || 'Asignar a'}</label>
                   <select

@@ -1,5 +1,6 @@
 import express from 'express';
 import nodemailer from 'nodemailer';
+import fs from 'fs';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
@@ -12,6 +13,55 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Encryption/Decryption Utility
+const CONFIG_KEY_PATH = path.join(__dirname, 'config.key');
+let masterKey;
+try {
+  if (fs.existsSync(CONFIG_KEY_PATH)) {
+    masterKey = fs.readFileSync(CONFIG_KEY_PATH);
+    if (masterKey.length !== 32) {
+      // Re-generate if key is invalid length
+      masterKey = crypto.randomBytes(32);
+      fs.writeFileSync(CONFIG_KEY_PATH, masterKey);
+    }
+  } else {
+    masterKey = crypto.randomBytes(32);
+    fs.writeFileSync(CONFIG_KEY_PATH, masterKey);
+    console.log('New master encryption key generated.');
+  }
+} catch (e) {
+  console.error('Crypto error:', e.message);
+  masterKey = Buffer.alloc(32, 'repor-ticket-fallback-secure-key');
+}
+
+const encrypt = (text) => {
+  if (!text) return text;
+  try {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', masterKey, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return iv.toString('hex') + ':' + encrypted;
+  } catch (e) {
+    console.error('Encryption error:', e.message);
+    return text;
+  }
+};
+
+const decrypt = (text) => {
+  if (!text || !text.includes(':')) return text;
+  try {
+    const [ivHex, encryptedHex] = text.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', masterKey, iv);
+    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (e) {
+    return text;
+  }
+};
 
 const app = express();
 app.use(cors());
@@ -28,7 +78,23 @@ let dbConfig = {
   prefix: process.env.DB_PREFIX || ''
 };
 
-// Master Database Pool
+// Load local override if exists
+const DB_OVERRIDE_PATH = path.join(__dirname, 'db_config.json');
+try {
+  if (fs.existsSync(DB_OVERRIDE_PATH)) {
+    const saved = JSON.parse(fs.readFileSync(DB_OVERRIDE_PATH, 'utf8'));
+    // Decrypt password if it looks encrypted
+    if (saved.password && saved.password.includes(':')) {
+      saved.password = decrypt(saved.password);
+    }
+    dbConfig = { ...dbConfig, ...saved };
+    console.log('Database configuration loaded and decrypted from db_config.json');
+  }
+} catch (e) {
+  console.error('Error loading db_config.json:', e.message);
+}
+
+// Ensure the initial pool uses the final decrypted dbConfig
 let masterPool = mysql.createPool({
   host: dbConfig.host,
   port: dbConfig.port,
@@ -44,6 +110,7 @@ let masterPool = mysql.createPool({
 const updateMasterPool = (newConfig) => {
   const oldPool = masterPool;
   dbConfig = { ...dbConfig, ...newConfig };
+  
   masterPool = mysql.createPool({
     host: dbConfig.host,
     port: dbConfig.port || 3306,
@@ -54,6 +121,11 @@ const updateMasterPool = (newConfig) => {
     connectionLimit: 10,
     queueLimit: 0
   });
+
+  if (oldPool) {
+    oldPool.end().catch(err => console.error('Error closing old pool:', err.message));
+  }
+
   // Clear company pools cache since they might depend on master
   companyPools.clear();
   return masterPool;
@@ -63,11 +135,35 @@ app.get('/api/system-info', (req, res) => {
   res.json({
     dbMode: dbConfig.mode,
     dbHost: dbConfig.host,
+    dbPort: dbConfig.port,
     dbUser: dbConfig.user,
     dbName: dbConfig.database,
     dbPrefix: dbConfig.prefix,
     version: '1.2.0'
   });
+});
+
+app.get('/api/health-check', async (req, res) => {
+  const start = Date.now();
+  let conn;
+  try {
+    // Attempt to get a real connection from the pool
+    conn = await masterPool.getConnection();
+    // Perform a low-level ping
+    await conn.ping();
+    const latency = Date.now() - start;
+    res.json({ success: true, latency, status: 'healthy' });
+  } catch (error) {
+    console.error('Database Health Check Failed:', error.message);
+    res.json({ 
+      success: false, 
+      latency: Date.now() - start, 
+      status: 'offline', 
+      error: error.message 
+    });
+  } finally {
+    if (conn) conn.release();
+  }
 });
 
 // Cache for company-specific pools
@@ -131,13 +227,16 @@ app.post('/api/send-test-email', async (req, res) => {
 
   try {
     // Create transporter
+    // If password looks encrypted (contains ':'), decrypt it first
+    const finalPass = (smtpPass && smtpPass.includes(':')) ? decrypt(smtpPass) : smtpPass;
+
     const transporter = nodemailer.createTransport({
       host: smtpHost,
       port: parseInt(smtpPort),
       secure: smtpSecure, // true for 465, false for other ports
       auth: {
         user: smtpUser,
-        pass: smtpPass,
+        pass: finalPass,
       },
       tls: {
         // Do not fail on invalid certs
@@ -198,25 +297,49 @@ app.post('/api/settings/database/test', async (req, res) => {
 app.post('/api/settings/database/save', async (req, res) => {
   const { host, port, user, password, database, mode } = req.body;
   try {
-    // 1. Update In-Memory Config and Pool
-    updateMasterPool({ host, port: parseInt(port) || 3306, user, password, database, mode });
+    const updatedConfig = { host, port: parseInt(port) || 3306, user, database, mode };
+    if (password && password.trim() !== '') {
+      updatedConfig.password = password;
+    }
     
-    // 2. Persist to DB if possible (for future restarts)
+    // 1. Update In-Memory Config and Pool
+    updateMasterPool(updatedConfig);
+    
+    // 2. Persist to Local File (Primary source of truth for bootstrapping)
+    const configToSave = { ...dbConfig };
+    if (configToSave.password) {
+      configToSave.password = encrypt(configToSave.password);
+    }
+    fs.writeFileSync(DB_OVERRIDE_PATH, JSON.stringify(configToSave, null, 2));
+    
+    // 3. Persist to DB if possible (Secondary backup)
     try {
-      const configJson = JSON.stringify({ host, port: parseInt(port) || 3306, user, password, database, mode });
+      const configStr = JSON.stringify(configToSave);
       await masterPool.execute(
         'INSERT INTO global_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
-        ['dbConfig', configJson, configJson]
+        ['dbConfig', configStr, configStr]
       );
-    } catch (saveErr) {
-      console.warn('Could not persist DB config to global_settings table, but applied to current session:', saveErr.message);
+    } catch (dbErr) {
+      console.warn('Non-critical: Failed to save DB config to database:', dbErr.message);
     }
 
-    res.json({ success: true, message: 'Database configuration saved and applied to current session.' });
+    res.json({ success: true, message: 'Database configuration saved and applied persistently.' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// Helper to safely parse JSON columns
+const parsePermissions = (data) => {
+  if (!data) return { viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false };
+  if (typeof data === 'object') return data;
+  try {
+    const parsed = JSON.parse(data);
+    return typeof parsed === 'object' ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+};
 
 // Helper to get system settings
 const getSystemSettings = async () => {
@@ -225,7 +348,16 @@ const getSystemSettings = async () => {
     const settings = {};
     rows.forEach(row => {
       try {
-        settings[row.setting_key] = JSON.parse(row.setting_value);
+        let val = JSON.parse(row.setting_value);
+        // Decrypt SMTP password if present
+        if (row.setting_key === 'smtpConfig' && val && val.smtpPass) {
+          val.smtpPass = decrypt(val.smtpPass);
+        }
+        // Decrypt DB config password if present (for UI)
+        if (row.setting_key === 'dbConfig' && val && val.password) {
+          val.password = decrypt(val.password);
+        }
+        settings[row.setting_key] = val;
       } catch (e) {
         settings[row.setting_key] = row.setting_value;
       }
@@ -554,8 +686,9 @@ app.post('/api/login', async (req, res) => {
       const pool = await getCompanyPool(user.company_id);
       if (pool) {
         const [details] = await pool.query('SELECT name, phone, extension, photo, permissions FROM company_users WHERE id = ?', [user.user_id]);
-        if (details.length > 0) {
+      if (details.length > 0) {
           detailedUser = { ...detailedUser, ...details[0] };
+          detailedUser.permissions = parsePermissions(details[0].permissions);
         }
       }
     } else {
@@ -563,6 +696,8 @@ app.post('/api/login', async (req, res) => {
       const [details] = await masterPool.query('SELECT name FROM system_users WHERE id = ?', [user.user_id]);
       if (details.length > 0) {
         detailedUser.name = details[0].name;
+        // Superadmins get all permissions implicitly or explicitly
+        detailedUser.permissions = { viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: true };
       }
     }
 
@@ -611,10 +746,19 @@ app.get('/api/tickets', withCompanyPool, async (req, res) => {
 app.post('/api/tickets', withCompanyPool, async (req, res) => {
   const { id, subject, description, user_id, priority, department } = req.body;
   try {
-    await req.db.execute(
-      'INSERT INTO tickets (id, subject, description, user_id, priority, department) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, subject, description, user_id, priority, department]
-    );
+    let query = 'INSERT INTO tickets (id, subject, description, user_id, priority, department';
+    let values = '(?, ?, ?, ?, ?, ?';
+    const params = [id, subject, description, user_id, priority, department];
+    
+    if (process.env.DB_MODE === 'single') {
+      query += ', company_id';
+      values += ', ?';
+      params.push(req.companyId);
+    }
+    
+    query += ') VALUES ' + values + ')';
+    
+    await req.db.execute(query, params);
     res.json({ success: true, message: 'Ticket created successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -655,7 +799,11 @@ app.get('/api/users', withCompanyPool, async (req, res) => {
     const params = process.env.DB_MODE === 'single' ? [req.companyId] : [];
     
     const [users] = await req.db.query(query, params);
-    res.json({ success: true, users });
+    const parsedUsers = users.map(u => ({
+      ...u,
+      permissions: parsePermissions(u.permissions)
+    }));
+    res.json({ success: true, users: parsedUsers });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -734,7 +882,11 @@ app.delete('/api/companies/:id', async (req, res) => {
 app.get('/api/global-users', async (req, res) => {
   try {
     const [users] = await masterPool.query('SELECT user_id AS id, name, email, role, company_id, permissions FROM global_directory');
-    res.json({ success: true, users });
+    const parsedUsers = users.map(u => ({
+      ...u,
+      permissions: parsePermissions(u.permissions)
+    }));
+    res.json({ success: true, users: parsedUsers });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -752,58 +904,73 @@ app.patch('/api/users/:id', async (req, res) => {
   }
 
   try {
-    // Resolve the target user's company
-    const [gdRows] = await masterPool.query('SELECT company_id FROM global_directory WHERE user_id = ?', [req.params.id]);
-    const targetCompanyId = gdRows.length > 0 ? gdRows[0].company_id : null;
-
-    // Get the correct pool for the target user
-    let pool;
-    if (userRole === 'superadmin' && targetCompanyId) {
-      pool = await getCompanyPool(targetCompanyId);
-    } else {
-      pool = await getCompanyPool(requesterCompanyId);
+    // Resolve the target user's details
+    const [gdRows] = await masterPool.query('SELECT company_id, role FROM global_directory WHERE user_id = ?', [req.params.id]);
+    if (gdRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found in global directory' });
     }
-
-    if (!pool) {
-      return res.status(404).json({ success: false, message: 'Company database not found' });
-    }
+    const targetUser = gdRows[0];
+    const targetCompanyId = targetUser.company_id;
+    const isSuperAdmin = targetUser.role === 'superadmin';
 
     const updates = [];
     const params = [];
-    if (name && userRole === 'superadmin') { updates.push('name = ?'); params.push(name); }
-    if (email && userRole === 'superadmin') { updates.push('email = ?'); params.push(email); }
+    if (name) { updates.push('name = ?'); params.push(name); }
     if (role) { updates.push('role = ?'); params.push(role); }
-    if (permissions) { updates.push('permissions = ?'); params.push(JSON.stringify(permissions)); }
+    if (permissions) {
+      updates.push('permissions = ?');
+      // Pass the object directly to mysql2; it will handle the JSON conversion if the column is JSON
+      // or we can stringify it once to be safe, but let's make sure it's an object if it came as a string
+      const parsedPerms = typeof permissions === 'string' ? JSON.parse(permissions) : permissions;
+      params.push(JSON.stringify(parsedPerms));
+    }
     if (phone) { updates.push('phone = ?'); params.push(phone); }
     if (extension) { updates.push('extension = ?'); params.push(extension); }
     if (photo !== undefined) { updates.push('photo = ?'); params.push(photo); }
-    if (newCompanyId !== undefined) { 
+    if (newCompanyId !== undefined && !isSuperAdmin) { 
       updates.push('company_id = ?'); 
       params.push(newCompanyId === '' ? null : newCompanyId); 
     }
     
     if (updates.length > 0) {
-      params.push(req.params.id);
-      const query = process.env.DB_MODE === 'single'
-        ? `UPDATE company_users SET ${updates.join(', ')} WHERE id = ? AND company_id = ?`
-        : `UPDATE company_users SET ${updates.join(', ')} WHERE id = ?`;
-      if (process.env.DB_MODE === 'single') params.push(targetCompanyId || requesterCompanyId);
+      if (isSuperAdmin) {
+        // Update system_users table for superadmins (only supports name and role changes here)
+        const sysUpdates = [];
+        const sysParams = [];
+        if (name) { sysUpdates.push('name = ?'); sysParams.push(name); }
+        if (role) { sysUpdates.push('role = ?'); sysParams.push(role); }
+        
+        if (sysUpdates.length > 0) {
+          sysParams.push(req.params.id);
+          await masterPool.execute(`UPDATE system_users SET ${sysUpdates.join(', ')} WHERE id = ?`, sysParams);
+        }
+      } else {
+        // Update company_users table for company users
+        const pool = await getCompanyPool(targetCompanyId || requesterCompanyId);
+        if (pool) {
+          const companyParams = [...params, req.params.id];
+          const query = process.env.DB_MODE === 'single'
+            ? `UPDATE company_users SET ${updates.join(', ')} WHERE id = ? AND company_id = ?`
+            : `UPDATE company_users SET ${updates.join(', ')} WHERE id = ?`;
+          if (process.env.DB_MODE === 'single') companyParams.push(targetCompanyId || requesterCompanyId);
+          
+          await pool.execute(query, companyParams);
+        }
+      }
       
-      await pool.execute(query, params);
-      
-      // Sync in global_directory
+      // Sync in global_directory (Always)
       const globalUpdates = [];
       const globalParams = [];
-      if (role) { globalUpdates.push('role = ?'); globalParams.push(role); }
       if (name) { globalUpdates.push('name = ?'); globalParams.push(name); }
-      if (email) { globalUpdates.push('email = ?'); globalParams.push(email); }
-      if (newCompanyId !== undefined) { 
+      if (role) { globalUpdates.push('role = ?'); globalParams.push(role); }
+      if (newCompanyId !== undefined && !isSuperAdmin) { 
         globalUpdates.push('company_id = ?'); 
         globalParams.push(newCompanyId === '' ? null : newCompanyId); 
       }
       if (permissions) {
         globalUpdates.push('permissions = ?');
-        globalParams.push(JSON.stringify(permissions));
+        const parsedPerms = typeof permissions === 'string' ? JSON.parse(permissions) : permissions;
+        globalParams.push(JSON.stringify(parsedPerms));
       }
       
       if (globalUpdates.length > 0) {
@@ -898,8 +1065,12 @@ app.get('/api/settings', async (req, res) => {
 app.post('/api/settings', async (req, res) => {
   try {
     const settings = req.body;
-    // We store the whole body as 'smtpConfig' if it looks like SMTP settings, 
-    // or we can be more generic. For now, let's treat it as smtpConfig for simplicity
+    
+    // Encrypt SMTP password if provided in the body
+    if (settings && settings.smtpPass) {
+      settings.smtpPass = encrypt(settings.smtpPass);
+    }
+
     const configJson = JSON.stringify(settings);
     await masterPool.execute(
       'INSERT INTO global_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
@@ -913,19 +1084,7 @@ app.post('/api/settings', async (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 
-// Load saved DB config and start server (only when run directly, not as serverless)
 const startServer = async () => {
-  try {
-    const [rows] = await masterPool.query('SELECT setting_value FROM global_settings WHERE setting_key = ?', ['dbConfig']);
-    if (rows.length > 0) {
-      const savedConfig = JSON.parse(rows[0].setting_value);
-      console.log('Applying saved Database Configuration...');
-      updateMasterPool(savedConfig);
-    }
-  } catch (err) {
-    console.log('Using environment variables for Database Configuration.');
-  }
-
   // Migration: add photo column to company_users if missing
   try {
     const migratePhoto = async (pool) => {

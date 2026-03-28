@@ -48,7 +48,7 @@
   --bg-subtle: rgba(0, 0, 0, 0.02);
   --bg-hover: rgba(0, 0, 0, 0.04);
   --bg-input: rgba(0, 0, 0, 0.03);
-  --public-overlay: radial-gradient(circle at 50% 50%, rgba(248, 250, 252, 0.3) 0%, rgba(248, 250, 252, 0.85) 100%), rgba(248, 250, 252, 0.4);
+  --public-overlay: radial-gradient(circle at 50% 50%, rgba(248, 250, 252, 0.05) 0%, rgba(248, 250, 252, 0.25) 100%), rgba(248, 250, 252, 0.1);
   color-scheme: light;
 }
 

@@ -5,8 +5,7 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
     subject: '',
     department: 'support',
     description: '',
-    name: user?.name || '',
-    email: user?.email || ''
+    priority: 'medium' // Default priority
   });
   const [attachments, setAttachments] = React.useState([]);
   const fileInputRef = React.useRef(null);
@@ -33,7 +32,19 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
   };
 
   const handleSubmit = () => {
-    onSubmit({ ...formData, attachments });
+    // Generate a simple ticket ID (in a real app, this would come from the backend or be a UUID)
+    const ticketId = 'TICK-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+    
+    onSubmit({
+      id: ticketId,
+      subject: formData.subject,
+      description: formData.description,
+      user_id: user?.user_id || user?.id || '', // Extract user_id from user object
+      priority: formData.priority,
+      department: formData.department
+      // Note: attachments are not sent here as the backend doesn't handle them yet
+      // In a full implementation, you'd upload attachments separately and associate them with the ticket
+    });
   };
 
   return (
