@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS company_users (
     role ENUM('admin', 'supervisor', 'customer') DEFAULT 'customer',
     phone VARCHAR(20),
     extension VARCHAR(10),
+    photo LONGTEXT,
     permissions JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY (company_id, email),

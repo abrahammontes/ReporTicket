@@ -6,30 +6,86 @@ const Profile = ({ user, t, onUpdate }) => {
   const [email, setEmail] = useState(user?.email || '');
   const [photo, setPhoto] = useState(user?.photo || null);
   const [success, setSuccess] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const savePhoto = async (photoData) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await dbService.updateUserProfile(user.id, { photo: photoData });
+      if (result.success) {
+        const updatedUser = { ...user, photo: photoData };
+        onUpdate(updatedUser);
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      } else {
+        setError(result.message || 'Error al guardar la foto');
+      }
+    } catch (err) {
+      setError(err.message || 'Error al guardar la foto');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        setError('La imagen es demasiado grande (máximo 10MB)');
+        return;
+      }
+      const img = new Image();
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPhoto(reader.result);
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX = 300;
+          let w = img.width, h = img.height;
+          if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } }
+          else { if (h > MAX) { w *= MAX / h; h = MAX; } }
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', 0.7);
+          setPhoto(compressed);
+          savePhoto(compressed);
+        };
+        img.src = reader.result;
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleSave = async () => {
+    setIsLoading(true);
+    setError(null);
     try {
-      const result = await dbService.updateUserProfile(user.id, { name, email, photo });
+      const updates = {};
+      if (user.role === 'superadmin') {
+        if (name !== (user?.name || '')) updates.name = name;
+        if (email !== (user?.email || '')) updates.email = email;
+      }
+      if (Object.keys(updates).length === 0) {
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+        setIsLoading(false);
+        return;
+      }
+      const result = await dbService.updateUserProfile(user.id, updates);
       if (result.success) {
-        // Since result.success is true, we update the local user state with new values
-        const updatedUser = { ...user, name, email, photo };
+        const updatedUser = { ...user, ...updates };
         onUpdate(updatedUser);
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
+      } else {
+        setError(result.message || 'Error al guardar');
       }
     } catch (err) {
-      console.error('Error updating profile:', err);
+      setError(err.message || 'Error al guardar');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -45,15 +101,17 @@ const Profile = ({ user, t, onUpdate }) => {
               height: '120px', 
               borderRadius: '50%', 
               background: photo ? `url(${photo}) center/cover` : 'linear-gradient(45deg, var(--primary), var(--secondary))', 
-              border: '4px solid rgba(255,255,255,0.1)',
+              border: '4px solid var(--border-color)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: '3rem',
               color: 'white',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+              boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+              opacity: isLoading ? 0.6 : 1,
+              transition: 'opacity 0.2s'
             }}>
-              {!photo && (user?.name?.[0] || 'U')}
+              {isLoading && photo ? null : !photo && (user?.name?.[0] || 'U')}
             </div>
             <label style={{ 
               position: 'absolute', 
@@ -103,7 +161,7 @@ const Profile = ({ user, t, onUpdate }) => {
             />
           </div>
 
-          <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+          <div style={{ padding: '1rem', background: 'var(--bg-subtle)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{t('role')}</p>
             <p style={{ fontWeight: '600', textTransform: 'uppercase', color: 'var(--primary)' }}>{t(`roles.${user?.role || 'customer'}`)}</p>
           </div>
@@ -120,8 +178,14 @@ const Profile = ({ user, t, onUpdate }) => {
             </div>
           )}
 
-          <button className="btn-primary" onClick={handleSave} style={{ padding: '0.75rem' }}>
-            {t('saveChanges')}
+          {error && (
+            <div style={{ padding: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', borderRadius: '0.5rem', fontSize: '0.9rem', textAlign: 'center' }}>
+              {error}
+            </div>
+          )}
+
+          <button className="btn-primary" onClick={handleSave} disabled={isLoading} style={{ padding: '0.75rem' }}>
+            {isLoading ? '...' : t('saveChanges')}
           </button>
         </div>
       </div>

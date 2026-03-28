@@ -22,7 +22,7 @@ const Dashboard = ({ stats, t, tickets = [], onSelectTicket }) => {
         padding: '1.5rem',
         border: activeFilter === id ? `2px solid ${color}` : '1px solid var(--border-color)',
         transform: activeFilter === id ? 'translateY(-4px)' : 'none',
-        background: activeFilter === id ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)',
+        background: activeFilter === id ? 'var(--bg-hover)' : 'var(--bg-subtle)',
         transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
         minWidth: '180px'
       }}
@@ -125,7 +125,7 @@ const Dashboard = ({ stats, t, tickets = [], onSelectTicket }) => {
                   gap: '1.5rem', 
                   padding: '1.25rem', 
                   borderRadius: '1rem',
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'var(--bg-subtle)',
                   border: '1px solid var(--border-color)',
                   cursor: 'pointer',
                   transition: 'var(--transition)'

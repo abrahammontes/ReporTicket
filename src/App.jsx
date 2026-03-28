@@ -189,7 +189,7 @@ function App() {
               left: 0,
               width: '100%',
               height: '100%',
-              background: 'radial-gradient(circle at 50% 50%, rgba(8, 9, 10, 0.2) 0%, rgba(8, 9, 10, 0.8) 100%), rgba(8, 9, 10, 0.3)',
+              background: 'var(--public-overlay)',
               backdropFilter: 'blur(1px)', // subtle bokeh micro-texture
               zIndex: 1
             }}></div>

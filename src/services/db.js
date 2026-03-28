@@ -135,6 +135,10 @@ export const dbService = {
       headers: getHeaders(),
       body: JSON.stringify(updates)
     });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || `Error ${response.status}`);
+    }
     return await response.json();
   },
 

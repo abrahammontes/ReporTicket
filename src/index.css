@@ -27,6 +27,10 @@
   --sidebar-bg: rgba(15, 23, 42, 0.85);
   --grad-start: #1e293b;
   --grad-end: #0f172a;
+  --bg-subtle: rgba(255, 255, 255, 0.02);
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-input: rgba(255, 255, 255, 0.03);
+  --public-overlay: radial-gradient(circle at 50% 50%, rgba(8, 9, 10, 0.2) 0%, rgba(8, 9, 10, 0.8) 100%), rgba(8, 9, 10, 0.3);
   color-scheme: dark;
 }
 
@@ -35,11 +39,16 @@
   --bg-card: rgba(255, 255, 255, 0.8);
   --text-main: #0f172a;
   --text-muted: #64748b;
-  --border-color: rgba(0, 0, 0, 0.05);
+  --border-color: rgba(0, 0, 0, 0.08);
   --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-blur: blur(24px);
   --sidebar-bg: rgba(248, 250, 252, 0.9);
   --grad-start: #f1f5f9;
   --grad-end: #e2e8f0;
+  --bg-subtle: rgba(0, 0, 0, 0.02);
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-input: rgba(0, 0, 0, 0.03);
+  --public-overlay: radial-gradient(circle at 50% 50%, rgba(248, 250, 252, 0.3) 0%, rgba(248, 250, 252, 0.85) 100%), rgba(248, 250, 252, 0.4);
   color-scheme: light;
 }
 
@@ -51,7 +60,7 @@
 
 body {
   min-height: 100vh;
-  background: #08090a; /* Fallback solid color */
+  background: var(--bg-main);
   color: var(--text-main);
   transition: background 0.5s var(--ease-premium), color 0.5s var(--ease-premium);
   overflow-x: hidden;
@@ -119,6 +128,7 @@ body {
   padding: 1.5rem;
   width: calc(100% - 260px);
   min-height: 100vh;
+  background: var(--bg-main);
   transition: all 0.4s var(--ease-premium);
 }
 
@@ -196,7 +206,7 @@ body {
 
 /* Form Elements Elegant */
 input, textarea, select {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-input);
   border: 1px solid var(--border-color);
   color: var(--text-main);
   padding: 0.65rem 1rem;
@@ -228,15 +238,69 @@ select option {
   color: var(--text-main);
 }
 
-[data-theme='light'] input, 
-[data-theme='light'] textarea, 
-[data-theme='light'] select {
-  background: rgba(0, 0, 0, 0.02);
-}
-
 [data-theme='light'] select option {
   background: #ffffff;
   color: #1a202c;
+}
+
+[data-theme='light'] .glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='light'] .glass-panel:hover {
+  border-color: rgba(24, 193, 202, 0.3);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='light'] .badge-new { background: rgba(59, 130, 246, 0.15); color: #2563eb; }
+[data-theme='light'] .badge-open { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
+[data-theme='light'] .badge-inprogress { background: rgba(168, 85, 247, 0.15); color: #9333ea; }
+[data-theme='light'] .badge-awaiting { background: rgba(14, 165, 233, 0.15); color: #0284c7; }
+[data-theme='light'] .badge-closed { background: rgba(244, 63, 94, 0.15); color: #e11d48; }
+[data-theme='light'] .badge-old { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+
+[data-theme='light'] .shake {
+  border-color: #ef4444 !important;
+}
+
+[data-theme='light'] ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+[data-theme='light'] .main-content {
+  background: linear-gradient(180deg, var(--grad-start) 0%, var(--grad-end) 100%);
+}
+
+[data-theme='light'] .sidebar {
+  border-right-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Light mode overrides for hardcoded rgba backgrounds */
+[data-theme='light'] .stat-card {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme='light'] .nav-link-btn {
+  color: var(--text-main);
+}
+
+[data-theme='light'] .nav-link-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='light'] .nav-link-btn.active {
+  background: rgba(24, 193, 202, 0.1);
+}
+
+[data-theme='light'] .custom-cursor {
+  display: none;
+}
+
+[data-theme='light'] .login-view,
+[data-theme='light'] .register-view {
+  background: var(--bg-main);
 }
 
 input:focus, textarea:focus, select:focus {
@@ -318,7 +382,7 @@ h1, h2, h3 {
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: rgba(255,255,255,0.02);
+  background: var(--bg-subtle);
   color: var(--text-muted);
   margin-bottom: 1rem;
 }
@@ -334,7 +398,7 @@ h1, h2, h3 {
   align-items: center;
   justify-content: space-between;
   padding: 0.6rem 1rem;
-  background: rgba(255,255,255,0.04);
+  background: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 0.75rem;
   margin-top: 0.5rem;
@@ -345,7 +409,7 @@ h1, h2, h3 {
   align-items: center;
   gap: 0.4rem;
   padding: 0.35rem 0.75rem;
-  background: rgba(255,255,255,0.05);
+  background: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 2rem;
   font-size: 0.75rem;

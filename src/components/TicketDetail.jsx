@@ -209,7 +209,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
     <div className="ticket-detail animate-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
         <button onClick={onBack} className="card-hover" style={{ 
-          background: 'rgba(255,255,255,0.05)', 
+          background: 'var(--bg-hover)', 
           border: '1px solid var(--border-color)', 
           color: 'var(--text-muted)', 
           cursor: 'pointer', 
@@ -273,7 +273,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 <div key={note.id} className="glass-panel" style={{
                   padding: '1rem',
                   borderLeft: note.type === 'internal' ? '4px solid #facc15' : '1px solid var(--border-color)',
-                  background: note.type === 'internal' ? 'rgba(250, 204, 21, 0.05)' : 'rgba(255,255,255,0.02)'
+                  background: note.type === 'internal' ? 'rgba(250, 204, 21, 0.05)' : 'var(--bg-subtle)'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: note.type === 'internal' ? '#facc15' : 'var(--primary)' }}>
@@ -286,7 +286,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                   {note.attachments && note.attachments.length > 0 && (
                     <div className="attachment-grid" style={{ marginTop: '0.75rem' }}>
                       {note.attachments.map(file => (
-                        <a key={file.id} href="#" className="attachment-tag" onClick={(e) => e.preventDefault()} style={{ background: 'rgba(255,255,255,0.03)' }}>
+                        <a key={file.id} href="#" className="attachment-tag" onClick={(e) => e.preventDefault()} style={{ background: 'var(--bg-input)' }}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
                           {file.name}
                         </a>
@@ -566,7 +566,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 </div>
               )}
 
-              <div style={{ marginTop: '0.5rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+              <div style={{ marginTop: '0.5rem', padding: '1rem', background: 'var(--bg-subtle)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{t('user')}</p>
                 <p style={{ fontSize: '0.9rem', fontWeight: '600' }}>{localTicket.user}</p>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>{t('date')}</p>
@@ -609,7 +609,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 />
               </div>
 
-              <div style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
+              <div style={{ padding: '1.5rem', background: 'var(--bg-input)', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
                 <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>{t('solveMath')}:</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--primary)' }}>{captcha.q} = </span>
@@ -631,7 +631,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 <button
                   onClick={() => setIsClosingRitual(false)}
                   className="nav-link-btn"
-                  style={{ width: '100%', textAlign: 'center', background: 'rgba(255,255,255,0.05)' }}
+                  style={{ width: '100%', textAlign: 'center', background: 'var(--bg-hover)' }}
                 >
                   {t('cancel')}
                 </button>

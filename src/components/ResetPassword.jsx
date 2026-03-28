@@ -10,6 +10,10 @@ const ResetPassword = ({ theme, t, onBack }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [confirmTouched, setConfirmTouched] = useState(false);
+
+  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
+  const showMismatch = confirmTouched && confirmPassword.length > 0 && !passwordsMatch;
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -133,10 +137,25 @@ const ResetPassword = ({ theme, t, onBack }) => {
                 type={showPassword ? "text" : "password"}
                 required
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => { setConfirmPassword(e.target.value); setConfirmTouched(true); }}
+                onBlur={() => setConfirmTouched(true)}
                 placeholder="••••••••"
-                style={{ width: '100%' }}
+                style={{
+                  width: '100%',
+                  borderColor: showMismatch ? '#f87171' : passwordsMatch ? '#4ade80' : undefined,
+                  transition: 'border-color 0.2s'
+                }}
               />
+              {showMismatch && (
+                <span style={{ color: '#f87171', fontSize: '0.78rem', marginTop: '0.4rem', display: 'block' }}>
+                  {t('passwordsDontMatch') || 'Las contraseñas no coinciden.'}
+                </span>
+              )}
+              {passwordsMatch && (
+                <span style={{ color: '#4ade80', fontSize: '0.78rem', marginTop: '0.4rem', display: 'block' }}>
+                  ✓
+                </span>
+              )}
             </div>
 
             <button 

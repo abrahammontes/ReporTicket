@@ -66,7 +66,7 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
               width: '100%', 
               padding: '0.6rem', 
               borderRadius: '0.5rem', 
-              background: 'rgba(255,255,255,0.05)', 
+              background: 'var(--bg-hover)', 
               border: '1px solid var(--border-color)',
               color: 'var(--text-main)',
               cursor: 'pointer',
@@ -195,7 +195,7 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
               minWidth: '36px', 
               borderRadius: '50%', 
               background: user?.photo ? `url(${user.photo}) center/cover` : 'linear-gradient(45deg, var(--primary), var(--secondary))',
-              border: '2px solid rgba(255,255,255,0.1)'
+              border: '2px solid var(--border-color)'
             }}></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: '0.85rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || t('adminAgent')}</p>

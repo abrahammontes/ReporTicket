@@ -49,7 +49,7 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
               placeholder={t('yourName')} 
               value={formData.name}
               disabled
-              style={{ background: 'rgba(255,255,255,0.05)', cursor: 'not-allowed', opacity: 0.7 }}
+              style={{ background: 'var(--bg-hover)', cursor: 'not-allowed', opacity: 0.7 }}
             />
           </div>
           <div>
@@ -59,7 +59,7 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
               placeholder={t('emailAddress')} 
               value={formData.email}
               disabled
-              style={{ background: 'rgba(255,255,255,0.05)', cursor: 'not-allowed', opacity: 0.7 }}
+              style={{ background: 'var(--bg-hover)', cursor: 'not-allowed', opacity: 0.7 }}
             />
           </div>
         </div>
@@ -162,7 +162,7 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
             onClick={onCancel} 
             className="card-hover"
             style={{ 
-              background: 'rgba(255,255,255,0.05)', 
+              background: 'var(--bg-hover)', 
               border: '1px solid var(--border-color)', 
               color: 'var(--text-muted)', 
               cursor: 'pointer', 

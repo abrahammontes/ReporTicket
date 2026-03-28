@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Master Database Initial Configuration
 let dbConfig = {
@@ -470,6 +470,7 @@ app.post('/api/register-company', async (req, res) => {
             email VARCHAR(255) UNIQUE NOT NULL,
             password VARCHAR(255) NOT NULL,
             role ENUM('admin', 'supervisor', 'customer') DEFAULT 'customer',
+            photo LONGTEXT,
             permissions JSON,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -552,7 +553,7 @@ app.post('/api/login', async (req, res) => {
     if (user.company_id) {
       const pool = await getCompanyPool(user.company_id);
       if (pool) {
-        const [details] = await pool.query('SELECT name, phone, extension, permissions FROM company_users WHERE id = ?', [user.user_id]);
+        const [details] = await pool.query('SELECT name, phone, extension, photo, permissions FROM company_users WHERE id = ?', [user.user_id]);
         if (details.length > 0) {
           detailedUser = { ...detailedUser, ...details[0] };
         }
@@ -649,8 +650,8 @@ app.post('/api/tickets/:id/notes', withCompanyPool, async (req, res) => {
 app.get('/api/users', withCompanyPool, async (req, res) => {
   try {
     const query = process.env.DB_MODE === 'single'
-      ? 'SELECT id, name, email, role, phone, extension, permissions FROM company_users WHERE company_id = ?'
-      : 'SELECT id, name, email, role, phone, extension, permissions FROM company_users';
+      ? 'SELECT id, name, email, role, phone, extension, photo, permissions FROM company_users WHERE company_id = ?'
+      : 'SELECT id, name, email, role, phone, extension, photo, permissions FROM company_users';
     const params = process.env.DB_MODE === 'single' ? [req.companyId] : [];
     
     const [users] = await req.db.query(query, params);
@@ -741,12 +742,13 @@ app.get('/api/global-users', async (req, res) => {
 
 // Company User Management
 app.patch('/api/users/:id', async (req, res) => {
-  const { name, email, role, permissions, phone, extension, companyId: newCompanyId } = req.body;
+  const { name, email, role, permissions, phone, extension, photo, companyId: newCompanyId } = req.body;
   const userRole = req.headers['x-user-role'];
   const requesterCompanyId = req.headers['x-company-id'];
 
   if ((name || email) && userRole !== 'superadmin') {
-    return res.status(403).json({ success: false, message: 'Only superadmin can edit name or email' });
+    // Don't block the whole request, just skip name/email updates
+    // This allows photo and other field updates to proceed
   }
 
   try {
@@ -768,12 +770,13 @@ app.patch('/api/users/:id', async (req, res) => {
 
     const updates = [];
     const params = [];
-    if (name) { updates.push('name = ?'); params.push(name); }
-    if (email) { updates.push('email = ?'); params.push(email); }
+    if (name && userRole === 'superadmin') { updates.push('name = ?'); params.push(name); }
+    if (email && userRole === 'superadmin') { updates.push('email = ?'); params.push(email); }
     if (role) { updates.push('role = ?'); params.push(role); }
     if (permissions) { updates.push('permissions = ?'); params.push(JSON.stringify(permissions)); }
     if (phone) { updates.push('phone = ?'); params.push(phone); }
     if (extension) { updates.push('extension = ?'); params.push(extension); }
+    if (photo !== undefined) { updates.push('photo = ?'); params.push(photo); }
     if (newCompanyId !== undefined) { 
       updates.push('company_id = ?'); 
       params.push(newCompanyId === '' ? null : newCompanyId); 
@@ -921,6 +924,29 @@ const startServer = async () => {
     }
   } catch (err) {
     console.log('Using environment variables for Database Configuration.');
+  }
+
+  // Migration: add photo column to company_users if missing
+  try {
+    const migratePhoto = async (pool) => {
+      const [cols] = await pool.query("SHOW COLUMNS FROM company_users LIKE 'photo'");
+      if (cols.length === 0) {
+        await pool.query('ALTER TABLE company_users ADD COLUMN photo LONGTEXT AFTER extension');
+      }
+    };
+
+    if (process.env.DB_MODE === 'single') {
+      await migratePhoto(masterPool);
+    } else {
+      const [companies] = await masterPool.query('SELECT id FROM companies');
+      for (const company of companies) {
+        const pool = await getCompanyPool(company.id);
+        if (pool) await migratePhoto(pool);
+      }
+    }
+    console.log('Database migrations applied.');
+  } catch (err) {
+    console.error('Migration error:', err.message);
   }
 };
 

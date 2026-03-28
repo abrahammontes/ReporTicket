@@ -65,7 +65,7 @@ const Register = ({ onRegister, onLogin, onBack, t, error }) => {
           onClick={onBack} 
           className="card-hover"
           style={{ 
-            background: 'rgba(255,255,255,0.05)', 
+            background: 'var(--bg-hover)', 
             border: '1px solid var(--border-color)', 
             color: 'var(--text-muted)', 
             cursor: 'pointer', 
@@ -242,7 +242,7 @@ const Register = ({ onRegister, onLogin, onBack, t, error }) => {
               alignItems: 'center', 
               gap: '1rem', 
               padding: '1rem', 
-              background: isRobotChecked ? 'rgba(24, 193, 202, 0.05)' : 'rgba(255,255,255,0.02)', 
+              background: isRobotChecked ? 'rgba(24, 193, 202, 0.05)' : 'var(--bg-subtle)', 
               border: localError && !isRobotChecked ? '1px solid #ef4444' : '1px solid var(--border-color)', 
               borderRadius: '0.85rem',
               cursor: 'pointer',
