@@ -568,6 +568,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
                             onChange={e => setEditCompanyName(e.target.value)} 
                             style={{ padding: '0.2rem', fontSize: '0.85rem', flex: 1 }} 
                             onKeyDown={e => e.key === 'Enter' && handleEditCompanySave(c.id)}
+                            disabled={user.role !== 'superadmin'}
                           />
                           <button onClick={() => handleEditCompanySave(c.id)} style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer' }}>✓</button>
                           <button onClick={() => setEditingCompanyId(null)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>✕</button>
@@ -616,7 +617,13 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
                       {editingUserId === u.id ? (
                         <>
                           <td style={{ padding: '1rem' }}>
-                            <input type="text" value={editUserForm.name} onChange={e => setEditUserForm(f => ({...f, name: e.target.value}))} style={{ padding: '0.4rem', width: '100%' }} />
+                            <input 
+                              type="text" 
+                              value={editUserForm.name} 
+                              onChange={e => setEditUserForm(f => ({...f, name: e.target.value}))} 
+                              style={{ padding: '0.4rem', width: '100%' }} 
+                              disabled={user.role !== 'superadmin'}
+                            />
                           </td>
                           <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{u.email}</td>
                           <td style={{ padding: '1rem' }}>

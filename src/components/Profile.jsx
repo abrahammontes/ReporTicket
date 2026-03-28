@@ -88,6 +88,7 @@ const Profile = ({ user, t, onUpdate }) => {
               value={name} 
               onChange={(e) => setName(e.target.value)}
               placeholder={t('enterNamePlaceholder')}
+              disabled={user.role !== 'superadmin'}
             />
           </div>
           
@@ -98,6 +99,7 @@ const Profile = ({ user, t, onUpdate }) => {
               value={email} 
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t('enterEmailPlaceholder')}
+              disabled={user.role !== 'superadmin'}
             />
           </div>
 
@@ -105,6 +107,12 @@ const Profile = ({ user, t, onUpdate }) => {
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{t('role')}</p>
             <p style={{ fontWeight: '600', textTransform: 'uppercase', color: 'var(--primary)' }}>{t(`roles.${user?.role || 'customer'}`)}</p>
           </div>
+
+          {user.role !== 'superadmin' && (
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center' }}>
+              * Solo el Super Administrador puede editar nombres y correos.
+            </p>
+          )}
 
           {success && (
             <div style={{ padding: '0.75rem', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', borderRadius: '0.5rem', fontSize: '0.9rem', textAlign: 'center' }}>

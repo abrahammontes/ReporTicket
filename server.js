@@ -681,6 +681,12 @@ app.get('/api/companies', async (req, res) => {
 
 app.patch('/api/companies/:id', async (req, res) => {
   const { name } = req.body;
+  const userRole = req.headers['x-user-role'];
+
+  if (name && userRole !== 'superadmin') {
+    return res.status(403).json({ success: false, message: 'Only superadmin can change company name' });
+  }
+  
   try {
     await masterPool.execute('UPDATE companies SET name = ? WHERE id = ?', [name, req.params.id]);
     res.json({ success: true, message: 'Company updated' });
@@ -712,11 +718,18 @@ app.get('/api/global-users', async (req, res) => {
 
 // Company User Management
 app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
-  const { name, role, permissions, phone, extension, companyId } = req.body;
+  const { name, email, role, permissions, phone, extension, companyId } = req.body;
+  const userRole = req.headers['x-user-role'];
+
+  if ((name || email) && userRole !== 'superadmin') {
+    return res.status(403).json({ success: false, message: 'Only superadmin can edit name or email' });
+  }
+
   try {
     const updates = [];
     const params = [];
     if (name) { updates.push('name = ?'); params.push(name); }
+    if (email) { updates.push('email = ?'); params.push(email); }
     if (role) { updates.push('role = ?'); params.push(role); }
     if (permissions) { updates.push('permissions = ?'); params.push(JSON.stringify(permissions)); }
     if (phone) { updates.push('phone = ?'); params.push(phone); }
@@ -740,6 +753,7 @@ app.patch('/api/users/:id', withCompanyPool, async (req, res) => {
       const globalParams = [];
       if (role) { globalUpdates.push('role = ?'); globalParams.push(role); }
       if (name) { globalUpdates.push('name = ?'); globalParams.push(name); }
+      if (email) { globalUpdates.push('email = ?'); globalParams.push(email); }
       if (companyId !== undefined) { 
         globalUpdates.push('company_id = ?'); 
         globalParams.push(companyId === '' ? null : companyId); 
