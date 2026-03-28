@@ -1291,13 +1291,32 @@ const startServer = async () => {
       }
     };
 
+    const migrateTicketNotes = async (pool) => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ticket_notes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ticket_id VARCHAR(20) NOT NULL,
+            company_id VARCHAR(50),
+            user_id VARCHAR(50),
+            content TEXT NOT NULL,
+            is_internal TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX (ticket_id)
+        );
+      `);
+    };
+
     if (process.env.DB_MODE === 'single') {
       await migratePhoto(masterPool);
+      await migrateTicketNotes(masterPool);
     } else {
       const [companies] = await masterPool.query('SELECT id FROM companies');
       for (const company of companies) {
         const pool = await getCompanyPool(company.id);
-        if (pool) await migratePhoto(pool);
+        if (pool) {
+          await migratePhoto(pool);
+          await migrateTicketNotes(pool);
+        }
       }
     }
     console.log('Database migrations applied.');
