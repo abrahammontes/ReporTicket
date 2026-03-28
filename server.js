@@ -892,7 +892,7 @@ app.get('/api/tickets', withCompanyPool, async (req, res) => {
     let params = [];
     let conditions = [];
 
-    if (process.env.DB_MODE === 'single') {
+    if (process.env.DB_MODE === 'single' && userRole !== 'superadmin') {
       conditions.push('company_id = ?');
       params.push(req.companyId);
     }
