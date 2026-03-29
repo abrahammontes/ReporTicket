@@ -170,7 +170,48 @@ app.get('/api/health-check', async (req, res) => {
 const companyPools = new Map();
 
 const getCompanyPool = async (companyId) => {
-  return masterPool;
+  // Return cached pool if exists
+  if (companyPools.has(companyId)) {
+    return companyPools.get(companyId);
+  }
+
+  // In single DB mode, all companies use the master pool
+  if (process.env.DB_MODE === 'single') {
+    return masterPool;
+  }
+
+  // In multiple DB mode, get company info from master DB
+  try {
+    const [companies] = await masterPool.query(
+      'SELECT db_name FROM companies WHERE id = ?',
+      [companyId]
+    );
+
+    if (companies.length === 0) {
+      throw new Error(`Company not found: ${companyId}`);
+    }
+
+    const dbName = companies[0].db_name;
+
+    // Create new pool for this company's database
+    const pool = mysql.createPool({
+      host: dbConfig.host,
+      port: dbConfig.port,
+      user: dbConfig.user,
+      password: dbConfig.password,
+      database: dbName,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0
+    });
+
+    // Cache the pool
+    companyPools.set(companyId, pool);
+    return pool;
+  } catch (error) {
+    console.error(`Error creating pool for company ${companyId}:`, error);
+    throw error;
+  }
 };
 
 // Middleware to resolve company pool
@@ -847,26 +888,62 @@ app.post('/api/register-company', async (req, res) => {
       return res.json({ success: true, userId, companyId, needsVerification: true, email, message: 'Código de verificación enviado al correo.' });
     }
 
-    // ── CASE 3: New company → superadmin only (auto-verified) ─────────────────
-    const userRole = req.headers['x-user-role'];
-    if (userRole !== 'superadmin') {
-      return res.status(403).json({ success: false, message: 'La creación de nuevas empresas está restringida a administradores centrales.' });
-    }
+     // ── CASE 3: New company → superadmin only (auto-verified) ─────────────────
+     const userRole = req.headers['x-user-role'];
+     if (userRole !== 'superadmin') {
+       return res.status(403).json({ success: false, message: 'La creación de nuevas empresas está restringida a administradores centrales.' });
+     }
 
-    const companyId = 'comp-' + Date.now();
-    const dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
-    const adminPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
+     const companyId = 'comp-' + Date.now();
+     const dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
+     const adminPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
 
-    await masterPool.execute('INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)', [companyId, companyName, dbName]);
-    await masterPool.execute(
-      'INSERT INTO company_users (id, company_id, name, email, password, role, permissions, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
-      [userId, companyId, name, email, hashedPassword, 'admin', adminPermissions]
-    );
-    await masterPool.execute(
-      'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
-      [email, userId, name, companyId, adminPermissions, hashedPassword, 'admin']
-    );
-    return res.json({ success: true, userId, companyId, dbName, needsVerification: false, message: 'Empresa y administrador creados exitosamente.' });
+     await masterPool.execute('INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)', [companyId, companyName, dbName]);
+     await masterPool.execute(
+       'INSERT INTO company_users (id, company_id, name, email, password, role, permissions, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+       [userId, companyId, name, email, hashedPassword, 'admin', adminPermissions]
+     );
+     await masterPool.execute(
+       'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+       [email, userId, name, companyId, adminPermissions, hashedPassword, 'admin']
+     );
+
+     // In multiple DB mode, create database and initialize tables for the new company
+     if (process.env.DB_MODE !== 'single') {
+       try {
+         // Create database
+         await masterPool.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+         
+         // Initialize tables in the new database
+         const tempConnection = await mysql.createPool({
+           host: dbConfig.host,
+           port: dbConfig.port,
+           user: dbConfig.user,
+           password: dbConfig.password,
+           database: dbName,
+           waitForConnections: true,
+           connectionLimit: 5,
+           queueLimit: 0
+         });
+         
+         const schema = fs.readFileSync('db_init.sql', 'utf8');
+         const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
+         
+         for (const statement of statements) {
+           await tempConnection.query(statement);
+         }
+         
+         await tempConnection.end();
+         
+         console.log(`[REGISTER] Database ${dbName} created and initialized for company ${companyId}`);
+       } catch (dbError) {
+         console.error('[REGISTER] Error creating/initializing database:', dbError);
+         // We don't fail the registration if DB creation fails, but we log it
+         // The company will still be registered in master DB
+       }
+     }
+
+     return res.json({ success: true, userId, companyId, dbName, needsVerification: false, message: 'Empresa y administrador creados exitosamente.' });
 
   } catch (error) {
     console.error('[REGISTER] Error:', error);
