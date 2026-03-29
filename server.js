@@ -826,62 +826,62 @@ app.post('/api/register-company', async (req, res) => {
 });
 
 app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
+   const { email, password } = req.body;
 
-  try {
-     const [users] = await masterPool.query(
-       'SELECT g.user_id, g.company_id, g.name, g.email, g.phone, g.extension, g.photo, g.role, g.password, c.name as company_name ' +
-       'FROM global_directory g ' +
-       'LEFT JOIN companies c ON g.company_id = c.id ' +
-       'WHERE g.email = ?',
-       [email]
-     );
+   try {
+      const [users] = await masterPool.query(
+        'SELECT g.user_id, g.company_id, g.name, g.email, g.phone, g.extension, g.photo, g.role, g.password, c.name as company_name ' +
+        'FROM global_directory g ' +
+        'LEFT JOIN companies c ON g.company_id = c.id ' +
+        'WHERE g.email = ?',
+        [email]
+      );
 
-    if (users.length === 0) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
+     if (users.length === 0) {
+       return res.status(401).json({ success: false, message: 'Invalid credentials' });
+     }
 
-    const passwordMatch = await bcrypt.compare(password, users[0].password);
-    if (!passwordMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
+     const passwordMatch = await bcrypt.compare(password, users[0].password);
+     if (!passwordMatch) {
+       return res.status(401).json({ success: false, message: 'Invalid credentials' });
+     }
 
-    const user = users[0];
-    console.log('[DEBUG LOGIN] User from DB:', user);
-    let detailedUser = { 
-      id: user.user_id, 
-      name: user.name,
-      email, 
-      role: user.role, 
-      companyId: user.company_id,
-      companyName: user.company_name,
-      phone: user.phone || null,
-      extension: user.extension || null,
-      photo: user.photo || null
-    };
-    console.log('[DEBUG OBJ] detailedUser:', JSON.stringify(detailedUser));
+     const user = users[0];
+     console.log('[DEBUG LOGIN] User from DB:', user);
+     let detailedUser = { 
+       id: user.user_id, 
+       name: user.name,
+       email, 
+       role: user.role, 
+       companyId: user.company_id,
+       companyName: user.company_name,
+       phone: user.phone || null,
+       extension: user.extension || null,
+       photo: user.photo || null
+     };
+     console.log('[DEBUG OBJ] detailedUser:', JSON.stringify(detailedUser));
 
-    // If company user, fetch more details from company DB
-    if (user.company_id) {
-      const pool = await getCompanyPool(user.company_id);
-      if (pool) {
-        const [details] = await pool.query('SELECT name, phone, extension, photo, permissions FROM company_users WHERE id = ?', [user.user_id]);
-        if (details.length > 0) {
-          detailedUser = { ...detailedUser, ...details[0] };
-          detailedUser.permissions = parsePermissions(details[0].permissions);
-        }
-      }
-    } else {
-      // Superadmin permissions are implicit or stored in global_directory
-      detailedUser.permissions = parsePermissions(user.permissions) || { viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: true };
-    }
+     // If company user, fetch more details from company DB
+     if (user.company_id) {
+       const pool = await getCompanyPool(user.company_id);
+       if (pool) {
+         const [details] = await pool.query('SELECT name, phone, extension, photo, permissions FROM company_users WHERE id = ?', [user.user_id]);
+         if (details.length > 0) {
+           detailedUser = { ...detailedUser, ...details[0] };
+           detailedUser.permissions = parsePermissions(details[0].permissions);
+         }
+       }
+     } else {
+       // Superadmin permissions are implicit or stored in global_directory
+       detailedUser.permissions = parsePermissions(user.permissions) || { viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: true };
+     }
 
-    res.json({ success: true, user: detailedUser });
-  } catch (error) {
-    console.error('Login Error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
+     res.json({ success: true, user: detailedUser });
+   } catch (error) {
+     console.error('Login Error:', error);
+     res.status(500).json({ success: false, message: error.message });
+   }
+ });
 
 // Ticket Endpoints
 app.get('/api/tickets', withCompanyPool, async (req, res) => {
