@@ -847,32 +847,33 @@ app.post('/api/login', async (req, res) => {
     }
 
     const user = users[0];
+    console.log('[DEBUG LOGIN] User from DB:', user);
     let detailedUser = { 
       id: user.user_id, 
+      name: user.name,
       email, 
       role: user.role, 
       companyId: user.company_id,
-      companyName: user.company_name
+      companyName: user.company_name,
+      phone: user.phone || null,
+      extension: user.extension || null,
+      photo: user.photo || null
     };
+    console.log('[DEBUG OBJ] detailedUser:', JSON.stringify(detailedUser));
 
     // If company user, fetch more details from company DB
     if (user.company_id) {
       const pool = await getCompanyPool(user.company_id);
       if (pool) {
         const [details] = await pool.query('SELECT name, phone, extension, photo, permissions FROM company_users WHERE id = ?', [user.user_id]);
-      if (details.length > 0) {
+        if (details.length > 0) {
           detailedUser = { ...detailedUser, ...details[0] };
           detailedUser.permissions = parsePermissions(details[0].permissions);
         }
       }
     } else {
-      // Superadmin details from master
-      const [details] = await masterPool.query('SELECT name FROM system_users WHERE id = ?', [user.user_id]);
-      if (details.length > 0) {
-        detailedUser.name = details[0].name;
-        // Superadmins get all permissions implicitly or explicitly
-        detailedUser.permissions = { viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: true };
-      }
+      // Superadmin permissions are implicit or stored in global_directory
+      detailedUser.permissions = parsePermissions(user.permissions) || { viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: true };
     }
 
     res.json({ success: true, user: detailedUser });
@@ -1203,6 +1204,9 @@ app.patch('/api/users/:id', async (req, res) => {
         const parsedPerms = typeof permissions === 'string' ? JSON.parse(permissions) : permissions;
         globalParams.push(JSON.stringify(parsedPerms));
       }
+      if (phone) { globalUpdates.push('phone = ?'); globalParams.push(phone); }
+      if (extension) { globalUpdates.push('extension = ?'); globalParams.push(extension); }
+      if (photo !== undefined) { globalUpdates.push('photo = ?'); globalParams.push(photo); }
       
       if (globalUpdates.length > 0) {
         globalParams.push(req.params.id);
@@ -1383,9 +1387,17 @@ const startServer = async () => {
       `);
     };
 
+    const migrateGlobalDirectory = async () => {
+      const [cols] = await masterPool.query("SHOW COLUMNS FROM global_directory LIKE 'phone'");
+      if (cols.length === 0) {
+        await masterPool.query('ALTER TABLE global_directory ADD COLUMN phone VARCHAR(20) AFTER role, ADD COLUMN extension VARCHAR(10) AFTER phone, ADD COLUMN photo LONGTEXT AFTER extension');
+      }
+    };
+
     if (process.env.DB_MODE === 'single') {
       await migratePhoto(masterPool);
       await migrateTicketNotes(masterPool);
+      await migrateGlobalDirectory();
     } else {
       const [companies] = await masterPool.query('SELECT id FROM companies');
       for (const company of companies) {
@@ -1395,6 +1407,7 @@ const startServer = async () => {
           await migrateTicketNotes(pool);
         }
       }
+      await migrateGlobalDirectory();
     }
     console.log('Database migrations applied.');
   } catch (err) {
