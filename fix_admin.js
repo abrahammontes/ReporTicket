@@ -49,10 +49,10 @@ async function fix() {
         [adminEmail, adminId, hashedPass, 'superadmin']
       );
     } else {
-      // Ensure user_id, password and role are correct
+      // Ensure password and role are correct
       await connection.execute(
-        'UPDATE global_directory SET user_id = ?, password = ?, role = ? WHERE email = ?',
-        [adminId, hashedPass, 'superadmin', adminEmail]
+        'UPDATE global_directory SET password = ?, role = ? WHERE email = ?',
+        [hashedPass, 'superadmin', adminEmail]
       );
     }
 

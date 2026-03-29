@@ -84,11 +84,11 @@ export const dbService = {
     return data.companies || [];
   },
 
-  registerCompany: async (companyName, userData) => {
+  registerCompany: async (name, adminUser) => {
     const response = await fetch(`${API_URL}/register-company`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...userData, companyName })
+      body: JSON.stringify({ name, adminUser })
     });
     const data = await response.json();
     if (!data.success) throw new Error(data.message);

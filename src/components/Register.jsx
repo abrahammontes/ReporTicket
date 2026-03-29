@@ -9,7 +9,7 @@ const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage
   const [phone, setPhone] = useState('');
   const [countryPrefix, setCountryPrefix] = useState('+52');
   const [extension, setExtension] = useState('');
-
+  const [companyName, setCompanyName] = useState('');
   const [isRobotChecked, setIsRobotChecked] = useState(false);
   const [honeypot, setHoneypot] = useState('');
   const [localError, setLocalError] = useState(null);
@@ -36,7 +36,8 @@ const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage
         email, 
         password, 
         phone: `${countryPrefix} ${phone}`, 
-        extension
+        extension,
+        companyName
       });
     } catch (err) {
       setLocalError(err.message);
@@ -124,7 +125,8 @@ const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
               <label style={{ display: 'block', marginBottom: '0.65rem', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('fullName')}</label>
               <input 
                 type="text" 
@@ -134,6 +136,17 @@ const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage
                 required
               />
             </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.65rem', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('company')}</label>
+              <input 
+                type="text" 
+                placeholder={t('enterCompanyPlaceholder')} 
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                required
+              />
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: '1rem' }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', marginBottom: '0.65rem', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('emailAddress')}</label>

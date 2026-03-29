@@ -50,14 +50,13 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
       )}
 
       <aside className={`sidebar ${isSidebarOpen ? 'mobile-open' : ''}`}>
-        <div className="sidebar-header" style={{ 
-           textAlign: 'left', 
-           marginBottom: '2.5rem',
-           padding: '0 0.5rem'
+        <div className="sidebar-header" onClick={() => { setView('landing'); setIsSidebarOpen(false); }} style={{ 
+          cursor: 'pointer', 
+          textAlign: 'left', 
+          marginBottom: '2.5rem',
+          padding: '0 0.5rem'
         }}>
-           <a href="https://reporticket.montes.digital" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-              <Logo theme={theme} />
-           </a>
+          <Logo theme={theme} />
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
