@@ -4,19 +4,21 @@ import Logo from './Logo';
 const Landing = ({ onGetStarted, onLogin, theme, setTheme, t, language, setLanguage }) => {
   return (
     <div className="landing-page animate-in" style={{ background: 'transparent' }}>
-      <nav style={{
-        padding: '0.75rem 5%',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderBottom: '1px solid var(--border-color)',
-        background: 'rgba(255,255,255,0.02)',
-        backdropFilter: 'blur(10px)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 1000
-      }}>
-        <Logo theme={theme} size={160} />
+       <nav style={{
+         padding: '0.75rem 5%',
+         display: 'flex',
+         justifyContent: 'space-between',
+         alignItems: 'center',
+         borderBottom: '1px solid var(--border-color)',
+         background: 'rgba(255,255,255,0.02)',
+         backdropFilter: 'blur(10px)',
+         position: 'sticky',
+         top: 0,
+         zIndex: 1000
+       }}>
+         <a href="https://reporticket.montes.digital" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+           <Logo theme={theme} size={160} />
+         </a>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <button
             onClick={() => setLanguage(language === 'en' ? 'es' : 'en')}
