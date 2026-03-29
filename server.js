@@ -731,15 +731,15 @@ app.post('/api/notify-registration', async (req, res) => {
 });
 
 app.post('/api/register-company', async (req, res) => {
-  const { name, adminUser } = req.body;
-  console.log('Registering company:', name);
-  console.log('Admin user data:', adminUser);
+  const { name, email, password, phone, extension, companyName } = req.body;
+  console.log('Registering company:', companyName);
+  console.log('Admin user data:', { name, email, password, phone, extension });
 
   try {
     // 1. Check if company already exists
     const [existingCompanies] = await masterPool.query(
       'SELECT id, db_name FROM companies WHERE name = ?',
-      [name]
+      [companyName]
     );
 
     let companyId;
@@ -758,7 +758,7 @@ app.post('/api/register-company', async (req, res) => {
       // 1. Create entry in master companies table
       await masterPool.execute(
         'INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)',
-        [companyId, name, dbName]
+        [companyId, companyName, dbName]
       );
 
       // 2. Create the physical database (Only in multi mode)
@@ -824,23 +824,23 @@ app.post('/api/register-company', async (req, res) => {
         // 4. Create the initial admin user
         const adminId = 'user-' + Date.now();
         const defaultPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
-        const hashedAdminPassword = await bcrypt.hash(adminUser.password, 10);
+        const hashedAdminPassword = await bcrypt.hash(password, 10);
         if (isSingle) {
           await targetPool.execute(
             'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [adminId, companyId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
+            [adminId, companyId, name, email, hashedAdminPassword, 'admin', defaultPermissions]
           );
         } else {
           await targetPool.execute(
             'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
-            [adminId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
+            [adminId, name, email, hashedAdminPassword, 'admin', defaultPermissions]
           );
         }
 
         // 5. Sync with global directory
         await masterPool.execute(
           'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [adminUser.email, adminId, adminUser.name, companyId, defaultPermissions, hashedAdminPassword, 'admin']
+          [email, adminId, name, companyId, defaultPermissions, hashedAdminPassword, 'admin']
         );
 
         if (!isSingle) await targetPool.end();
@@ -868,24 +868,24 @@ app.post('/api/register-company', async (req, res) => {
       // Create the user (customer role by default for self-registration)
       const userId = 'user-' + Date.now();
       const defaultPermissions = JSON.stringify({ viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false });
-      const hashedPassword = await bcrypt.hash(adminUser.password, 10);
+      const hashedPassword = await bcrypt.hash(password, 10);
       
       if (isSingle) {
         await targetPool.execute(
           'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [userId, companyId, adminUser.name, adminUser.email, hashedPassword, 'customer', defaultPermissions]
+          [userId, companyId, name, email, hashedPassword, 'customer', defaultPermissions]
         );
       } else {
         await targetPool.execute(
           'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
-          [userId, adminUser.name, adminUser.email, hashedPassword, 'customer', defaultPermissions]
+          [userId, name, email, hashedPassword, 'customer', defaultPermissions]
         );
       }
 
       // Sync with global directory
       await masterPool.execute(
         'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [adminUser.email, userId, adminUser.name, companyId, defaultPermissions, hashedPassword, 'customer']
+        [email, userId, name, companyId, defaultPermissions, hashedPassword, 'customer']
       );
 
       if (!isSingle) await targetPool.end();
@@ -901,81 +901,9 @@ app.post('/api/register-company', async (req, res) => {
   }
 });
 
-    try {
-      const initSql = isSingle ? "" : `
-        CREATE TABLE IF NOT EXISTS company_users (
-            id VARCHAR(50) PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            email VARCHAR(255) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            role ENUM('admin', 'supervisor', 'customer') DEFAULT 'customer',
-            photo LONGTEXT,
-            permissions JSON,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS tickets (
-            id VARCHAR(20) PRIMARY KEY,
-            subject VARCHAR(255) NOT NULL,
-            description TEXT,
-            user_id VARCHAR(50),
-            status ENUM('new', 'open', 'inprogress', 'awaiting', 'old', 'closed') DEFAULT 'new',
-            priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES company_users(id)
-        );
-        CREATE TABLE IF NOT EXISTS ticket_notes (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            ticket_id VARCHAR(20) NOT NULL,
-            company_id VARCHAR(50),
-            user_id VARCHAR(50),
-            content TEXT NOT NULL,
-            is_internal TINYINT(1) DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (ticket_id) REFERENCES tickets(id)
-        );
-      `;
-
-      if (initSql) await targetPool.query(initSql);
-
-      // 4. Create the initial admin user
-      const adminId = 'user-' + Date.now();
-      const defaultPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
-      const hashedAdminPassword = await bcrypt.hash(adminUser.password, 10);
-      if (isSingle) {
-        await targetPool.execute(
-          'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [adminId, companyId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
-        );
-      } else {
-        await targetPool.execute(
-          'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
-          [adminId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
-        );
-      }
-
-      // 5. Sync with global directory
-      await masterPool.execute(
-        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [adminUser.email, adminId, adminUser.name, companyId, defaultPermissions, hashedAdminPassword, 'admin']
-      );
-
-      if (!isSingle) await targetPool.end();
-
-      res.json({ success: true, companyId, dbName, message: 'Company and database created successfully.' });
-    } catch (innerError) {
-      if (!isSingle) await targetPool.end();
-      throw innerError;
-    }
-  } catch (error) {
-    console.error('Registration Error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
 app.post('/api/login', async (req, res) => {
-   const { email, password } = req.body;
-
    try {
+      const { email, password } = req.body;
       const [users] = await masterPool.query(
         'SELECT g.user_id, g.company_id, g.name, g.email, g.phone, g.extension, g.photo, g.role, g.password, c.name as company_name ' +
         'FROM global_directory g ' +
