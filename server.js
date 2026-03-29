@@ -198,81 +198,99 @@ const withCompanyPool = async (req, res, next) => {
 // Ticket Notification Helpers
 const getTicketInvolvedParties = async (ticketId, companyId, db) => {
   try {
-    console.log(`Searching involved parties for ticket ${ticketId} in company ${companyId}`);
-let ticketQuery = 'SELECT t.subject, t.user_id, t.agent_id, t.company_id, t.created_at, t.updated_at, u.email as customer_email, u.name as customer_name ' +
-                       'FROM tickets t ' +
-                       'LEFT JOIN company_users u ON t.user_id = u.id AND (u.company_id = t.company_id OR ? = "master") ' +
-                       'WHERE t.id = ?';
-    let ticketParams = [companyId, ticketId];
-    
-    const [tickets] = await db.query(ticketQuery, ticketParams);
+    console.log(`[NOTIF] Searching involved parties for ticket ${ticketId} in company ${companyId}`);
+
+    const ticketQuery =
+      'SELECT t.id, t.subject, t.priority, t.status, t.user_id, t.agent_id, t.company_id, t.created_at, t.updated_at, ' +
+      'u.email AS customer_email, u.name AS customer_name ' +
+      'FROM tickets t ' +
+      'LEFT JOIN company_users u ON t.user_id = u.id ' +
+      'WHERE t.id = ?';
+
+    const [tickets] = await db.query(ticketQuery, [ticketId]);
     if (tickets.length === 0) {
-      console.warn(`[NOTIF] Ticket ${ticketId} not found in database search.`);
+      console.warn(`[NOTIF] Ticket ${ticketId} not found.`);
       return null;
     }
     const ticket = tickets[0];
     const actualCompanyId = ticket.company_id || companyId;
-    console.log(`[NOTIF] Found ticket: ${ticket.subject}, customer: ${ticket.customer_email}, actualCompanyId: ${actualCompanyId}`);
 
     const involved = [];
+
+    // 1. Customer (ticket creator)
     if (ticket.customer_email) {
       involved.push({ email: ticket.customer_email, name: ticket.customer_name, role: 'customer' });
     }
 
-    // 2. Get Agent info if assigned
+    // 2. Assigned agent
     if (ticket.agent_id) {
-        let agentQuery = 'SELECT email, name FROM company_users WHERE id = ?';
-        let agentParams = [ticket.agent_id];
-        if (process.env.DB_MODE === 'single') {
-            agentQuery += ' AND company_id = ?';
-            agentParams.push(actualCompanyId);
-        }
-        const [agents] = await db.query(agentQuery, agentParams);
-        if (agents.length > 0 && agents[0].email) {
-            console.log(`[NOTIF] Adding agent: ${agents[0].email}`);
-            involved.push({ email: agents[0].email, name: agents[0].name, role: 'agent' });
-        }
+      const agentQ = process.env.DB_MODE === 'single'
+        ? 'SELECT email, name FROM company_users WHERE id = ? AND company_id = ?'
+        : 'SELECT email, name FROM company_users WHERE id = ?';
+      const agentP = process.env.DB_MODE === 'single' ? [ticket.agent_id, actualCompanyId] : [ticket.agent_id];
+      const [agents] = await db.query(agentQ, agentP);
+      if (agents.length > 0 && agents[0].email && !involved.some(p => p.email === agents[0].email)) {
+        involved.push({ email: agents[0].email, name: agents[0].name, role: 'agent' });
+      }
     }
 
-    // 3. Get Supervisors info
-    let supervisorQuery = "SELECT email, name FROM company_users WHERE role = 'supervisor'";
-    let supervisorParams = [];
-    if (process.env.DB_MODE === 'single') {
-        supervisorQuery += ' AND company_id = ?';
-        supervisorParams.push(actualCompanyId);
-    }
-    const [supervisors] = await db.query(supervisorQuery, supervisorParams);
+    // 3. Supervisors of the same company
+    const supervisorQ = process.env.DB_MODE === 'single'
+      ? "SELECT email, name FROM company_users WHERE role = 'supervisor' AND company_id = ?"
+      : "SELECT email, name FROM company_users WHERE role = 'supervisor'";
+    const supervisorP = process.env.DB_MODE === 'single' ? [actualCompanyId] : [];
+    const [supervisors] = await db.query(supervisorQ, supervisorP);
     supervisors.forEach(s => {
-        if (s.email && !involved.some(p => p.email === s.email)) {
-            console.log(`[NOTIF] Adding supervisor: ${s.email}`);
-            involved.push({ email: s.email, name: s.name, role: 'supervisor' });
-        }
+      if (s.email && !involved.some(p => p.email === s.email)) {
+        involved.push({ email: s.email, name: s.name, role: 'supervisor' });
+      }
     });
 
+    // 4. Admins of the same company
+    const adminQ = process.env.DB_MODE === 'single'
+      ? "SELECT email, name FROM company_users WHERE role = 'admin' AND company_id = ?"
+      : "SELECT email, name FROM company_users WHERE role = 'admin'";
+    const adminP = process.env.DB_MODE === 'single' ? [actualCompanyId] : [];
+    const [admins] = await db.query(adminQ, adminP);
+    admins.forEach(a => {
+      if (a.email && !involved.some(p => p.email === a.email)) {
+        involved.push({ email: a.email, name: a.name, role: 'admin' });
+      }
+    });
+
+    console.log(`[NOTIF] Involved parties for ${ticketId}: ${involved.map(p => p.email).join(', ') || 'none'}`);
+
     return {
-        subject: ticket.subject,
-        parties: involved
+      subject: ticket.subject,
+      priority: ticket.priority,
+      status: ticket.status,
+      created_at: ticket.created_at,
+      updated_at: ticket.updated_at,
+      parties: involved
     };
   } catch (err) {
-    console.error('Error getting involved parties:', err);
+    console.error('[NOTIF] Error getting involved parties:', err);
     return null;
   }
 };
 
+const priorityLabel = { low: 'Baja', medium: 'Media', high: 'Alta' };
+const statusLabel = { new: 'Nuevo', open: 'Abierto', inprogress: 'En Progreso', awaiting: 'En Espera', old: 'Antiguo', closed: 'Cerrado' };
+
 const sendTicketEmailNotification = async (ticketId, companyId, db, updateType, updateDetails = {}) => {
   try {
-    console.log(`[NOTIF] Triggered for Ticket: ${ticketId}, Company: ${companyId}, Type: ${updateType}`);
+    console.log(`[NOTIF] Triggered: Ticket ${ticketId} | Type: ${updateType}`);
+
     const settings = await getSystemSettings();
     const config = settings.smtpConfig || {};
-    if (!config || !config.smtpHost) {
-      console.warn(`[NOTIF] SMTP not configured in global_settings. Skipping notification for ${ticketId}.`);
+    if (!config.smtpHost) {
+      console.warn(`[NOTIF] SMTP not configured. Skipping notification for ${ticketId}.`);
       return;
     }
-    console.log(`[NOTIF] Using SMTP: ${config.smtpHost}:${config.smtpPort} (${config.smtpUser})`);
 
     const data = await getTicketInvolvedParties(ticketId, companyId, db);
     if (!data || data.parties.length === 0) {
-      console.warn('No involved parties found for ticket:', ticketId);
+      console.warn(`[NOTIF] No recipients found for ticket ${ticketId}.`);
       return;
     }
 
@@ -284,80 +302,107 @@ const sendTicketEmailNotification = async (ticketId, companyId, db, updateType, 
       tls: { rejectUnauthorized: false }
     });
 
-     const creationTimestamp = new Date(data.created_at).toLocaleString('es-MX', { 
-         timeZone: 'America/Mexico_City',
-         dateStyle: 'long',
-         timeStyle: 'medium'
-     });
-     
-     const modificationTimestamp = new Date(data.updated_at).toLocaleString('es-MX', { 
-         timeZone: 'America/Mexico_City',
-         dateStyle: 'long',
-         timeStyle: 'medium'
-     });
+    const fmt = (d) => d ? new Date(d).toLocaleString('es-MX', {
+      timeZone: 'America/Mexico_City', dateStyle: 'long', timeStyle: 'short'
+    }) : '—';
 
     for (const party of data.parties) {
-        let title = '';
-        let body = '';
-        
-        switch (updateType) {
-            case 'new_ticket':
-                title = 'Nuevo Ticket Registrado';
-                body = `Se ha creado el ticket <strong>#${ticketId}</strong> con el asunto: <em>${data.subject}</em>.`;
-                break;
-            case 'status_change':
-                title = 'Actualización de Estado';
-                body = `El ticket <strong>#${ticketId}</strong> ha cambiado su estado a <strong>${updateDetails.newStatus || 'actualizado'}</strong>.`;
-                break;
-            case 'new_note':
-                if (updateDetails.isInternal && party.role === 'customer') continue; 
-                title = 'Nueva Respuesta en Ticket';
-                body = `Se ha añadido una nueva respuesta al ticket <strong>#${ticketId}</strong>.`;
-                break;
-            default:
-                title = 'Actualización de Ticket';
-                body = `Se ha realizado una modificación en el ticket <strong>#${ticketId}</strong>.`;
-        }
+      let eventTitle = '';
+      let eventBody = '';
+      let eventColor = '#6366f1';
 
-        const mailOptions = {
-            from: `"ReporTicket Notificaciones" <${config.smtpUser}>`,
-            to: party.email,
-            subject: `[${ticketId}] ${title}: ${data.subject}`,
-            html: `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; color: #333;">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <h1 style="color: #6366f1; margin: 0;">ReporTicket</h1>
-                        <p style="color: #666; font-size: 0.9rem;">Gestión de Servicios Administrados</p>
-                    </div>
-                    <h2 style="color: #1f2937; border-bottom: 2px solid #f3f4f6; padding-bottom: 10px;">${title}</h2>
-                    <p>Hola <strong>${party.name}</strong>,</p>
-                    <p style="line-height: 1.5;">${body}</p>
-                    
-                     <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #6366f1; margin: 20px 0;">
-                         <p style="margin: 0; font-size: 0.9rem; color: #4b5563;">
-                             <strong>Fecha de Creación:</strong> ${creationTimestamp}<br>
-                             <strong>Última Modificación:</strong> ${modificationTimestamp}
-                         </p>
-                     </div>
+      switch (updateType) {
+        case 'new_ticket':
+          eventTitle = '🎫 Nuevo Ticket Registrado';
+          eventBody = `Se ha creado un nuevo ticket en el sistema.`;
+          eventColor = '#10b981';
+          break;
+        case 'status_change':
+          eventTitle = '🔄 Actualización de Estado';
+          eventBody = `El estado del ticket ha cambiado a <strong>${statusLabel[updateDetails.newStatus] || updateDetails.newStatus}</strong>.`;
+          eventColor = '#f59e0b';
+          break;
+        case 'new_note':
+          if (updateDetails.isInternal && party.role === 'customer') continue; // Don't notify customer on internal notes
+          eventTitle = '💬 Nueva Respuesta';
+          eventBody = `Se ha añadido una nueva ${updateDetails.isInternal ? 'nota interna' : 'respuesta'} al ticket.`;
+          eventColor = '#6366f1';
+          break;
+        default:
+          eventTitle = '📋 Actualización de Ticket';
+          eventBody = `Se ha realizado una modificación en el ticket.`;
+      }
 
-                    <p style="font-size: 0.85rem; color: #9ca3af; margin-top: 30px; border-top: 1px solid #f3f4f6; padding-top: 15px;">
-                        Este es un correo automático generado por el sistema de trazabilidad de ReporTicket. 
-                        No es necesario responder a esta dirección.
-                    </p>
-                </div>
-            `
-        };
+      const html = `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb; padding: 20px;">
+          <div style="background: #1f2937; border-radius: 12px 12px 0 0; padding: 24px 30px; text-align: center;">
+            <h1 style="color: #fff; margin: 0; font-size: 1.5rem; letter-spacing: -0.5px;">ReporTicket</h1>
+            <p style="color: #9ca3af; margin: 4px 0 0; font-size: 0.85rem;">Sistema de Gestión de Tickets</p>
+          </div>
+          <div style="background: #fff; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb; padding: 30px;">
+            <div style="border-left: 4px solid ${eventColor}; padding-left: 16px; margin-bottom: 24px;">
+              <h2 style="color: #111827; margin: 0 0 4px; font-size: 1.1rem;">${eventTitle}</h2>
+              <p style="color: #6b7280; margin: 0; font-size: 0.9rem;">${eventBody}</p>
+            </div>
 
-        try {
-            await transporter.sendMail(mailOptions);
-        } catch (mailErr) {
-            console.error(`Failed to send email to ${party.email}:`, mailErr.message);
-        }
+            <p style="margin: 0 0 20px; color: #374151;">Hola <strong>${party.name}</strong>,</p>
+
+            <div style="background: #f3f4f6; border-radius: 8px; padding: 20px; margin: 0 0 24px;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem; color: #374151;">
+                <tr>
+                  <td style="padding: 6px 0; font-weight: 600; width: 40%; color: #6b7280;">N° Ticket</td>
+                  <td style="padding: 6px 0;"><strong>#${ticketId}</strong></td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Asunto</td>
+                  <td style="padding: 6px 0;">${data.subject}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Prioridad</td>
+                  <td style="padding: 6px 0;">${priorityLabel[data.priority] || data.priority || '—'}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Estado</td>
+                  <td style="padding: 6px 0;">${statusLabel[data.status] || data.status || '—'}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Creado</td>
+                  <td style="padding: 6px 0;">${fmt(data.created_at)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Última actualización</td>
+                  <td style="padding: 6px 0;">${fmt(data.updated_at)}</td>
+                </tr>
+              </table>
+            </div>
+
+            <p style="font-size: 0.8rem; color: #9ca3af;">
+              Este es un correo automático generado por ReporTicket. Por favor, no respondas directamente a este mensaje.
+            </p>
+          </div>
+          <div style="background: #f3f4f6; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px; padding: 16px 30px; text-align: center;">
+            <p style="margin: 0; font-size: 0.75rem; color: #9ca3af;">© ${new Date().getFullYear()} ReporTicket · Notificaciones automáticas</p>
+          </div>
+        </div>
+      `;
+
+      try {
+        await transporter.sendMail({
+          from: `"ReporTicket Notificaciones" <${config.smtpUser}>`,
+          to: party.email,
+          subject: `[#${ticketId}] ${eventTitle.replace(/^.\s/, '')} – ${data.subject}`,
+          html
+        });
+        console.log(`[NOTIF] Email sent to ${party.email} (${party.role})`);
+      } catch (mailErr) {
+        console.error(`[NOTIF] Failed to send to ${party.email}:`, mailErr.message);
+      }
     }
   } catch (err) {
-    console.error('Notification system error:', err);
+    console.error('[NOTIF] System error:', err);
   }
 };
+
 
 app.post('/api/send-test-email', async (req, res) => {
 
