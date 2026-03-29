@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS companies (
     id VARCHAR(50) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL UNIQUE,
     db_name VARCHAR(100) NOT NULL UNIQUE,
     status ENUM('active', 'suspended', 'pending') DEFAULT 'active',
     logo_url TEXT,

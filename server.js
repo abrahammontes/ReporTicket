@@ -734,22 +734,126 @@ app.post('/api/register-company', async (req, res) => {
   const { name, adminUser } = req.body;
   console.log('Registering company:', name);
   console.log('Admin user data:', adminUser);
-  const companyId = 'comp-' + Date.now();
-  const dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
 
   try {
-    // 1. Create entry in master
-    await masterPool.execute(
-      'INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)',
-      [companyId, name, dbName]
+    // 1. Check if company already exists
+    const [existingCompanies] = await masterPool.query(
+      'SELECT id, db_name FROM companies WHERE name = ?',
+      [name]
     );
 
-    // 2. Create the physical database (Only in multi mode)
-    if (process.env.DB_MODE !== 'single') {
-      await masterPool.query(`CREATE DATABASE \`${dbName}\``);
+    let companyId;
+    let dbName;
+
+    if (existingCompanies.length > 0) {
+      // Company already exists, use existing ID
+      companyId = existingCompanies[0].id;
+      dbName = existingCompanies[0].db_name;
+      console.log('Using existing company:', companyId);
+    } else {
+      // Create new company entry
+      companyId = 'comp-' + Date.now();
+      dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
+
+      // 1. Create entry in master companies table
+      await masterPool.execute(
+        'INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)',
+        [companyId, name, dbName]
+      );
+
+      // 2. Create the physical database (Only in multi mode)
+      if (process.env.DB_MODE !== 'single') {
+        await masterPool.query(`CREATE DATABASE \`${dbName}\``);
+      }
+
+      // 3. Initialize tables and create admin
+      const isSingle = process.env.DB_MODE === 'single';
+      const targetPool = isSingle ? masterPool : mysql.createPool({
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT) || 3306,
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASS || '',
+        database: dbName,
+        multipleStatements: true
+      });
+
+      try {
+        const initSql = isSingle ? "" : `
+          CREATE TABLE IF NOT EXISTS company_users (
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            role ENUM('admin', 'supervisor', 'customer') DEFAULT 'customer',
+            photo LONGTEXT,
+            permissions JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE TABLE IF NOT EXISTS tickets (
+            id VARCHAR(20) PRIMARY KEY,
+            company_id VARCHAR(50) NOT NULL,
+            subject VARCHAR(255) NOT NULL,
+            description TEXT,
+            user_id VARCHAR(50),
+            status ENUM('new', 'open', 'inprogress', 'awaiting', 'old', 'closed') DEFAULT 'new',
+            priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
+            agent_id VARCHAR(50),
+            department VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES company_users(id) ON DELETE SET NULL,
+            INDEX (company_id, status)
+          );
+          CREATE TABLE IF NOT EXISTS ticket_notes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            company_id VARCHAR(50) NOT NULL,
+            ticket_id VARCHAR(20),
+            user_id VARCHAR(50),
+            content TEXT NOT NULL,
+            is_internal BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+            FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES company_users(id) ON DELETE SET NULL
+          );
+        `;
+
+        if (initSql) await targetPool.query(initSql);
+
+        // 4. Create the initial admin user
+        const adminId = 'user-' + Date.now();
+        const defaultPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
+        const hashedAdminPassword = await bcrypt.hash(adminUser.password, 10);
+        if (isSingle) {
+          await targetPool.execute(
+            'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [adminId, companyId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
+          );
+        } else {
+          await targetPool.execute(
+            'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
+            [adminId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
+          );
+        }
+
+        // 5. Sync with global directory
+        await masterPool.execute(
+          'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [adminUser.email, adminId, adminUser.name, companyId, defaultPermissions, hashedAdminPassword, 'admin']
+        );
+
+        if (!isSingle) await targetPool.end();
+
+        res.json({ success: true, companyId, dbName, message: 'Company and database created successfully.' });
+      } catch (innerError) {
+        if (!isSingle) await targetPool.end();
+        throw innerError;
+      }
+      return; // Exit early since we handled the new company case
     }
 
-    // 3. Initialize tables and create admin
+    // If we're here, we're using an existing company - just create the user in that company's context
     const isSingle = process.env.DB_MODE === 'single';
     const targetPool = isSingle ? masterPool : mysql.createPool({
       host: process.env.DB_HOST || 'localhost',
@@ -759,6 +863,43 @@ app.post('/api/register-company', async (req, res) => {
       database: dbName,
       multipleStatements: true
     });
+
+    try {
+      // Create the user (customer role by default for self-registration)
+      const userId = 'user-' + Date.now();
+      const defaultPermissions = JSON.stringify({ viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false });
+      const hashedPassword = await bcrypt.hash(adminUser.password, 10);
+      
+      if (isSingle) {
+        await targetPool.execute(
+          'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [userId, companyId, adminUser.name, adminUser.email, hashedPassword, 'customer', defaultPermissions]
+        );
+      } else {
+        await targetPool.execute(
+          'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
+          [userId, adminUser.name, adminUser.email, hashedPassword, 'customer', defaultPermissions]
+        );
+      }
+
+      // Sync with global directory
+      await masterPool.execute(
+        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [adminUser.email, userId, adminUser.name, companyId, defaultPermissions, hashedPassword, 'customer']
+      );
+
+      if (!isSingle) await targetPool.end();
+
+      res.json({ success: true, companyId, dbName, message: 'User registered to existing company successfully.' });
+    } catch (userError) {
+      if (!isSingle) await targetPool.end();
+      throw userError;
+    }
+  } catch (error) {
+    console.error('Registration Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
     try {
       const initSql = isSingle ? "" : `
