@@ -1387,12 +1387,23 @@ const startServer = async () => {
       `);
     };
 
-    const migrateGlobalDirectory = async () => {
-      const [cols] = await masterPool.query("SHOW COLUMNS FROM global_directory LIKE 'phone'");
-      if (cols.length === 0) {
-        await masterPool.query('ALTER TABLE global_directory ADD COLUMN phone VARCHAR(20) AFTER role, ADD COLUMN extension VARCHAR(10) AFTER phone, ADD COLUMN photo LONGTEXT AFTER extension');
-      }
-    };
+     const migrateGlobalDirectory = async () => {
+       // Add phone column if missing
+       let [cols] = await masterPool.query("SHOW COLUMNS FROM global_directory LIKE 'phone'");
+       if (cols.length === 0) {
+         await masterPool.query('ALTER TABLE global_directory ADD COLUMN phone VARCHAR(20) AFTER role');
+       }
+       // Add extension column if missing
+       [cols] = await masterPool.query("SHOW COLUMNS FROM global_directory LIKE 'extension'");
+       if (cols.length === 0) {
+         await masterPool.query('ALTER TABLE global_directory ADD COLUMN extension VARCHAR(10) AFTER phone');
+       }
+       // Add photo column if missing
+       [cols] = await masterPool.query("SHOW COLUMNS FROM global_directory LIKE 'photo'");
+       if (cols.length === 0) {
+         await masterPool.query('ALTER TABLE global_directory ADD COLUMN photo LONGTEXT AFTER extension');
+       }
+     };
 
     if (process.env.DB_MODE === 'single') {
       await migratePhoto(masterPool);
