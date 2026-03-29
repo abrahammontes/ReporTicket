@@ -15,8 +15,6 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
   const [agents, setAgents] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
 
   // Ref for auto-resize
   const textareaRef = useRef(null);
@@ -641,7 +639,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                   <input
                     type="number"
                     value={captchaInput}
-                    onChange={(e) => setCaptchaInput(e.target.value)}
+                    onChange={setCaptchaInput}
                     style={{ width: '80px', textAlign: 'center', fontSize: '1.1rem' }}
                     placeholder="?"
                   />
