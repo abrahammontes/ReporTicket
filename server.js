@@ -1292,39 +1292,14 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
           : [req.params.id, latestNote.text, latestNote.type === 'internal' ? 1 : 0]
       );
       
-      // 2. Legacy Sync (for UI visibility)
-      const [ticketRows] = await req.db.query('SELECT notes FROM tickets WHERE id = ?', [req.params.id]);
-      if (ticketRows.length > 0) {
-        let currentNotes = [];
-        try {
-            const rawNotes = ticketRows[0].notes;
-            currentNotes = typeof rawNotes === 'string' ? JSON.parse(rawNotes) : (rawNotes || []);
-            if (!Array.isArray(currentNotes)) currentNotes = [];
-        } catch (e) {
-            currentNotes = [];
-        }
-        
-        // Ensure we don't have a corrupt "string-spread" situation from frontend
-        // If 'notes' from body is just the latest note in an array, use it. 
-        // If frontend sent the full array, ensure it's valid.
-        let finalNotes;
-        if (Array.isArray(notes) && notes.length > 0) {
-            // Check if the frontend sent the full history plus the new one
-            // or if it sent something that needs appending.
-            if (notes.length > currentNotes.length) {
-                finalNotes = notes;
-            } else {
-                finalNotes = [...currentNotes, latestNote];
-            }
-        } else {
-            finalNotes = [...currentNotes, latestNote];
-        }
-        
-        await req.db.execute(
-          'UPDATE tickets SET notes = ?, updated_at = NOW() WHERE id = ?',
-          [JSON.stringify(finalNotes), req.params.id]
-        );
-      }
+       // 2. Legacy Sync (for UI visibility)
+       // Trust the notes array sent by the frontend as the complete and correct set of notes
+       if (Array.isArray(notes)) {
+         await req.db.execute(
+           'UPDATE tickets SET notes = ?, updated_at = NOW() WHERE id = ?',
+           [JSON.stringify(notes), req.params.id]
+         );
+       }
       
       // 3. Notification
       await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'new_note', { isInternal: latestNote.type === 'internal' }).catch(err => console.log('[NOTIF ERR] PATCH Note:', err.message));

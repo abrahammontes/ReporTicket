@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
     agent_id VARCHAR(50),
     department VARCHAR(100),
+    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
