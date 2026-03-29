@@ -47,11 +47,27 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
 
   useEffect(() => {
     if (user?.role === 'superadmin') {
+      // Superadmins see all users and companies
       dbService.getUsers().then(data => {
         // Map company_id to companyId for frontend consistency
         setUsers(data.map(u => ({ ...u, companyId: u.company_id })));
       });
       dbService.getCompanies().then(setCompanies);
+    } else if (user?.role === 'admin' && user.companyId) {
+      // Company admins see users in their own company and their company details
+      dbService.getUsers().then(data => {
+        // Filter users to only those in the same company and map company_id to companyId
+        const companyUsers = data.filter(u => u.company_id === user.companyId);
+        setUsers(companyUsers.map(u => ({ ...u, companyId: u.company_id })));
+      });
+      dbService.getCompanies().then(data => {
+        // Filter companies to only the user's company
+        const userCompany = data.filter(c => c.id === user.companyId);
+        setCompanies(userCompany);
+      });
+    }
+    // Load system info and settings for all logged-in users
+    if (user) {
       dbService.getSystemInfo().then(info => {
         setSystemInfo(info);
         setDbConfigForm(prev => ({
@@ -72,32 +88,46 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
     }
   }, [user]);
 
-  const handleCreateCompany = async (e) => {
-    e.preventDefault();
-    if (!newCompanyName.trim() || !newAdminName.trim() || !newAdminEmail.trim() || !newAdminPassword.trim()) {
-      alert(t('fillAllFields') || 'Por favor completa todos los campos');
-      return;
-    }
-    try {
-      await dbService.registerCompany(newCompanyName.trim(), {
-        name: newAdminName.trim(),
-        email: newAdminEmail.trim(),
-        password: newAdminPassword.trim()
-      });
-      const updated = await dbService.getCompanies();
-      setCompanies(updated);
-      await fetchUsers();
-      setNewCompanyName('');
-      setNewAdminName('');
-      setNewAdminEmail('');
-      setNewAdminPassword('');
-      setCompanySuccessMessage(t('companyCreatedMsg'));
-      setTimeout(() => setCompanySuccessMessage(''), 3000);
-    } catch (err) {
-      console.error('Error creating company:', err);
-      alert(err.message);
-    }
-  };
+    const fetchUsers = async () => {
+      if (user?.role === 'superadmin') {
+        dbService.getUsers().then(data => {
+          setUsers(data.map(u => ({ ...u, companyId: u.company_id })));
+        });
+      } else if (user?.role === 'admin' && user.companyId) {
+        dbService.getUsers().then(data => {
+          // Filter users to only those in the same company and map company_id to companyId
+          const companyUsers = data.filter(u => u.company_id === user.companyId);
+          setUsers(companyUsers.map(u => ({ ...u, companyId: u.company_id })));
+        });
+      }
+    };
+
+    const handleCreateCompany = async (e) => {
+      e.preventDefault();
+      if (!newCompanyName.trim() || !newAdminName.trim() || !newAdminEmail.trim() || !newAdminPassword.trim()) {
+        alert(t('fillAllFields') || 'Por favor completa todos los campos');
+        return;
+      }
+      try {
+        await dbService.registerCompany(newCompanyName.trim(), {
+          name: newAdminName.trim(),
+          email: newAdminEmail.trim(),
+          password: newAdminPassword.trim()
+        });
+        const updated = await dbService.getCompanies();
+        setCompanies(updated);
+        await fetchUsers();
+        setNewCompanyName('');
+        setNewAdminName('');
+        setNewAdminEmail('');
+        setNewAdminPassword('');
+        setCompanySuccessMessage(t('companyCreatedMsg'));
+        setTimeout(() => setCompanySuccessMessage(''), 3000);
+      } catch (err) {
+        console.error('Error creating company:', err);
+        alert(err.message);
+      }
+    };
 
   const generateRandomPassword = () => {
     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+";
