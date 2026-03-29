@@ -130,14 +130,11 @@ function App() {
   const handleRegister = async (userData) => {
     setAuthError(null);
     try {
-      // 1. Create company and its database
-      const regResult = await dbService.registerCompany(userData.companyName, userData);
+      // Register user as a customer (no company assignment — admin will manage that)
+      const regResult = await dbService.registerCompany(null, userData);
 
-      // 2. Refresh local context and notify
       setSuccessMsg(t('registrationSuccess'));
       setView('login');
-      
-      // Optional: Automatic notifications can stay in backend register-company logic
     } catch (err) {
       if (err.message.includes('user_exists')) {
         setAuthError(t('errorUserExists'));

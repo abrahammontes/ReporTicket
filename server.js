@@ -708,162 +708,81 @@ app.post('/api/notify-registration', async (req, res) => {
 
 app.post('/api/register-company', async (req, res) => {
   const { name, email, password, phone, extension, companyName } = req.body;
-  console.log('Registering company:', companyName);
-  console.log('Admin user data:', { name, email, password, phone, extension });
+  console.log('[REGISTER] User:', email, '| Company:', companyName || '(none)');
 
   try {
-    // 1. Check if company already exists
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userId = 'user-' + Date.now();
+    const customerPermissions = JSON.stringify({ viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false });
+
+    // ── CASE 1: No company provided → register as unassigned customer ──────────
+    if (!companyName) {
+      await masterPool.execute(
+        'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, NULL, ?, ?, ?, ?, ?)',
+        [userId, name, email, hashedPassword, 'customer', customerPermissions]
+      );
+      await masterPool.execute(
+        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, NULL, ?, ?, ?)',
+        [email, userId, name, customerPermissions, hashedPassword, 'customer']
+      );
+      return res.json({ success: true, userId, message: 'Cuenta creada como cliente. Un administrador asignará tu empresa.' });
+    }
+
+    // ── CASE 2: Company name provided → look it up ────────────────────────────
     const [existingCompanies] = await masterPool.query(
       'SELECT id, db_name FROM companies WHERE name = ?',
       [companyName]
     );
 
-    let companyId;
-    let dbName;
-
     if (existingCompanies.length > 0) {
-      // Company already exists, use existing ID
-      companyId = existingCompanies[0].id;
-      dbName = existingCompanies[0].db_name;
-      console.log('Using existing company:', companyId);
-    } else {
-      // Create new company entry
-      companyId = 'comp-' + Date.now();
-      dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
-
-      // 1. Create entry in master companies table
+      // Company exists → add user as customer
+      const companyId = existingCompanies[0].id;
       await masterPool.execute(
-        'INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)',
-        [companyId, companyName, dbName]
+        'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [userId, companyId, name, email, hashedPassword, 'customer', customerPermissions]
       );
-
-      // 2. Initialise tables and create admin
-      const isSingle = true; // Forced to single database for now
-      const targetPool = masterPool;
-
-      try {
-        const initSql = isSingle ? "" : `
-          CREATE TABLE IF NOT EXISTS company_users (
-            id VARCHAR(50) PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            email VARCHAR(255) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            role ENUM('admin', 'supervisor', 'customer') DEFAULT 'customer',
-            photo LONGTEXT,
-            permissions JSON,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-          );
-          CREATE TABLE IF NOT EXISTS tickets (
-            id VARCHAR(20) PRIMARY KEY,
-            company_id VARCHAR(50) NOT NULL,
-            subject VARCHAR(255) NOT NULL,
-            description TEXT,
-            user_id VARCHAR(50),
-            status ENUM('new', 'open', 'inprogress', 'awaiting', 'old', 'closed') DEFAULT 'new',
-            priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
-            agent_id VARCHAR(50),
-            department VARCHAR(100),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES company_users(id) ON DELETE SET NULL,
-            INDEX (company_id, status)
-          );
-          CREATE TABLE IF NOT EXISTS ticket_notes (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            company_id VARCHAR(50) NOT NULL,
-            ticket_id VARCHAR(20),
-            user_id VARCHAR(50),
-            content TEXT NOT NULL,
-            is_internal BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
-            FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES company_users(id) ON DELETE SET NULL
-          );
-        `;
-
-        if (initSql) await targetPool.query(initSql);
-
-        // 4. Create the initial admin user
-        const adminId = 'user-' + Date.now();
-        const defaultPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
-        const hashedAdminPassword = await bcrypt.hash(password, 10);
-        if (isSingle) {
-          await targetPool.execute(
-            'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [adminId, companyId, name, email, hashedAdminPassword, 'admin', defaultPermissions]
-          );
-        } else {
-          await targetPool.execute(
-            'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
-            [adminId, name, email, hashedAdminPassword, 'admin', defaultPermissions]
-          );
-        }
-
-        // 5. Sync with global directory
-        await masterPool.execute(
-          'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [email, adminId, name, companyId, defaultPermissions, hashedAdminPassword, 'admin']
-        );
-
-        if (!isSingle) await targetPool.end();
-
-        res.json({ success: true, companyId, dbName, message: 'Company record created successfully.' });
-      } catch (innerError) {
-        if (!isSingle) await targetPool.end();
-        throw innerError;
-      }
-      return; // Exit early since we handled the new company case
-    }
-
-    // If we're here, we're using an existing company - just create the user in that company's context
-    const isSingle = process.env.DB_MODE === 'single';
-    const targetPool = isSingle ? masterPool : mysql.createPool({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT) || 3306,
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASS || '',
-      database: dbName,
-      multipleStatements: true
-    });
-
-    try {
-      // Create the user (customer role by default for self-registration)
-      const userId = 'user-' + Date.now();
-      const defaultPermissions = JSON.stringify({ viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false });
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-      if (isSingle) {
-        await targetPool.execute(
-          'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [userId, companyId, name, email, hashedPassword, 'customer', defaultPermissions]
-        );
-      } else {
-        await targetPool.execute(
-          'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
-          [userId, name, email, hashedPassword, 'customer', defaultPermissions]
-        );
-      }
-
-      // Sync with global directory
       await masterPool.execute(
         'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [email, userId, name, companyId, defaultPermissions, hashedPassword, 'customer']
+        [email, userId, name, companyId, customerPermissions, hashedPassword, 'customer']
       );
-
-      if (!isSingle) await targetPool.end();
-
-      res.json({ success: true, companyId, dbName, message: 'User registered to existing company successfully.' });
-    } catch (userError) {
-      if (!isSingle) await targetPool.end();
-      throw userError;
+      return res.json({ success: true, userId, companyId, message: 'Usuario registrado como cliente en la empresa existente.' });
     }
+
+    // ── CASE 3: Company does not exist → only superadmin can create it ────────
+    const userRole = req.headers['x-user-role'];
+    if (userRole !== 'superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: 'La creación de nuevas empresas está restringida a administradores centrales.'
+      });
+    }
+
+    // Superadmin creates a new company and its first admin user
+    const companyId = 'comp-' + Date.now();
+    const dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
+    const adminPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
+
+    await masterPool.execute(
+      'INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)',
+      [companyId, companyName, dbName]
+    );
+    await masterPool.execute(
+      'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [userId, companyId, name, email, hashedPassword, 'admin', adminPermissions]
+    );
+    await masterPool.execute(
+      'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [email, userId, name, companyId, adminPermissions, hashedPassword, 'admin']
+    );
+
+    return res.json({ success: true, userId, companyId, dbName, message: 'Empresa y administrador creados exitosamente.' });
+
   } catch (error) {
-    console.error('Registration Error:', error);
+    console.error('[REGISTER] Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 app.post('/api/login', async (req, res) => {
    try {
