@@ -756,77 +756,202 @@ app.post('/api/register-company', async (req, res) => {
   console.log('[REGISTER] User:', email, '| Company:', companyName || '(none)');
 
   try {
+    // Check if email already exists
+    const [existing] = await masterPool.query('SELECT email FROM global_directory WHERE email = ?', [email]);
+    if (existing.length > 0) {
+      return res.status(409).json({ success: false, message: 'user_exists: El correo ya está registrado.' });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = 'user-' + Date.now();
     const customerPermissions = JSON.stringify({ viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false });
 
-    // ── CASE 1: No company provided → register as unassigned customer ──────────
+    // Generate 6-digit verification code valid for 24h
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    // Helper: send verification email
+    const sendVerificationEmail = async () => {
+      try {
+        const settings = await getSystemSettings();
+        const smtp = settings.smtpConfig || {};
+        if (!smtp.smtpHost) {
+          console.warn('[REGISTER] SMTP not configured, skipping verification email.');
+          return;
+        }
+        const transporter = nodemailer.createTransport({
+          host: smtp.smtpHost,
+          port: parseInt(smtp.smtpPort),
+          secure: smtp.smtpSecure,
+          auth: { user: smtp.smtpUser, pass: smtp.smtpPass },
+          tls: { rejectUnauthorized: false }
+        });
+        await transporter.sendMail({
+          from: `"ReporTicket" <${smtp.smtpUser}>`,
+          to: email,
+          subject: 'Activa tu cuenta – ReporTicket',
+          html: `
+            <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;background:#f9fafb;padding:20px;">
+              <div style="background:#1f2937;border-radius:12px 12px 0 0;padding:28px 30px;text-align:center;">
+                <h1 style="color:#fff;margin:0;font-size:1.6rem;">ReporTicket</h1>
+                <p style="color:#9ca3af;margin:4px 0 0;font-size:0.85rem;">Sistema de Gestión de Tickets</p>
+              </div>
+              <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:36px 30px;">
+                <h2 style="color:#111827;margin:0 0 8px;font-size:1.2rem;">Activa tu cuenta</h2>
+                <p style="color:#6b7280;margin:0 0 28px;font-size:0.95rem;">Hola <strong>${name}</strong>, usa el siguiente código para activar tu cuenta. Expira en <strong>24 horas</strong>.</p>
+                <div style="background:#f3f4f6;border-radius:12px;padding:24px;text-align:center;margin:0 0 28px;">
+                  <span style="font-size:2.8rem;font-weight:800;letter-spacing:12px;color:#6366f1;font-family:monospace;">${verificationCode}</span>
+                </div>
+                <p style="color:#9ca3af;font-size:0.8rem;margin:0;">Si no creaste esta cuenta, puedes ignorar este correo.</p>
+              </div>
+              <div style="background:#f3f4f6;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px;padding:14px 30px;text-align:center;">
+                <p style="margin:0;font-size:0.75rem;color:#9ca3af;">© ${new Date().getFullYear()} ReporTicket · Notificaciones automáticas</p>
+              </div>
+            </div>
+          `
+        });
+        console.log('[REGISTER] Verification email sent to:', email);
+      } catch (mailErr) {
+        console.error('[REGISTER] Failed to send verification email:', mailErr.message);
+      }
+    };
+
+    // ── CASE 1: No company → unassigned customer (needs verification) ──────────
     if (!companyName) {
       await masterPool.execute(
-        'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, NULL, ?, ?, ?, ?, ?)',
+        'INSERT INTO company_users (id, company_id, name, email, password, role, permissions, is_verified) VALUES (?, NULL, ?, ?, ?, ?, ?, 0)',
         [userId, name, email, hashedPassword, 'customer', customerPermissions]
       );
       await masterPool.execute(
-        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, NULL, ?, ?, ?)',
-        [email, userId, name, customerPermissions, hashedPassword, 'customer']
+        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role, verification_code, verification_expires, is_verified) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, 0)',
+        [email, userId, name, customerPermissions, hashedPassword, 'customer', verificationCode, verificationExpires]
       );
-      return res.json({ success: true, userId, message: 'Cuenta creada como cliente. Un administrador asignará tu empresa.' });
+      await sendVerificationEmail();
+      return res.json({ success: true, userId, needsVerification: true, email, message: 'Código de verificación enviado al correo.' });
     }
 
     // ── CASE 2: Company name provided → look it up ────────────────────────────
-    const [existingCompanies] = await masterPool.query(
-      'SELECT id, db_name FROM companies WHERE name = ?',
-      [companyName]
-    );
+    const [existingCompanies] = await masterPool.query('SELECT id, db_name FROM companies WHERE name = ?', [companyName]);
 
     if (existingCompanies.length > 0) {
-      // Company exists → add user as customer
       const companyId = existingCompanies[0].id;
       await masterPool.execute(
-        'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO company_users (id, company_id, name, email, password, role, permissions, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 0)',
         [userId, companyId, name, email, hashedPassword, 'customer', customerPermissions]
       );
       await masterPool.execute(
-        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [email, userId, name, companyId, customerPermissions, hashedPassword, 'customer']
+        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role, verification_code, verification_expires, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
+        [email, userId, name, companyId, customerPermissions, hashedPassword, 'customer', verificationCode, verificationExpires]
       );
-      return res.json({ success: true, userId, companyId, message: 'Usuario registrado como cliente en la empresa existente.' });
+      await sendVerificationEmail();
+      return res.json({ success: true, userId, companyId, needsVerification: true, email, message: 'Código de verificación enviado al correo.' });
     }
 
-    // ── CASE 3: Company does not exist → only superadmin can create it ────────
+    // ── CASE 3: New company → superadmin only (auto-verified) ─────────────────
     const userRole = req.headers['x-user-role'];
     if (userRole !== 'superadmin') {
-      return res.status(403).json({
-        success: false,
-        message: 'La creación de nuevas empresas está restringida a administradores centrales.'
-      });
+      return res.status(403).json({ success: false, message: 'La creación de nuevas empresas está restringida a administradores centrales.' });
     }
 
-    // Superadmin creates a new company and its first admin user
     const companyId = 'comp-' + Date.now();
     const dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
     const adminPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
 
+    await masterPool.execute('INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)', [companyId, companyName, dbName]);
     await masterPool.execute(
-      'INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)',
-      [companyId, companyName, dbName]
-    );
-    await masterPool.execute(
-      'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO company_users (id, company_id, name, email, password, role, permissions, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
       [userId, companyId, name, email, hashedPassword, 'admin', adminPermissions]
     );
     await masterPool.execute(
-      'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
       [email, userId, name, companyId, adminPermissions, hashedPassword, 'admin']
     );
-
-    return res.json({ success: true, userId, companyId, dbName, message: 'Empresa y administrador creados exitosamente.' });
+    return res.json({ success: true, userId, companyId, dbName, needsVerification: false, message: 'Empresa y administrador creados exitosamente.' });
 
   } catch (error) {
     console.error('[REGISTER] Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// Email verification endpoint
+app.post('/api/auth/verify-email', async (req, res) => {
+  const { email, code } = req.body;
+  if (!email || !code) return res.status(400).json({ success: false, message: 'Email y código son requeridos.' });
+  try {
+    const [users] = await masterPool.query(
+      'SELECT user_id, verification_code, verification_expires, is_verified FROM global_directory WHERE email = ?',
+      [email]
+    );
+    if (users.length === 0) return res.status(404).json({ success: false, message: 'Correo no encontrado.' });
+    const user = users[0];
+
+    if (user.is_verified) return res.json({ success: true, message: 'La cuenta ya estaba verificada.' });
+    if (user.verification_code !== code) return res.status(400).json({ success: false, message: 'Código incorrecto. Verifica tu correo e inténtalo de nuevo.' });
+    if (new Date() > new Date(user.verification_expires)) return res.status(400).json({ success: false, message: 'El código ha expirado. Solicita uno nuevo.' });
+
+    // Mark as verified in both tables
+    await masterPool.execute(
+      'UPDATE global_directory SET is_verified = 1, verification_code = NULL, verification_expires = NULL WHERE email = ?',
+      [email]
+    );
+    await masterPool.execute('UPDATE company_users SET is_verified = 1 WHERE id = ?', [user.user_id]);
+
+    res.json({ success: true, message: '¡Cuenta activada correctamente! Ya puedes iniciar sesión.' });
+  } catch (error) {
+    console.error('[VERIFY] Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Resend verification code
+app.post('/api/auth/resend-verification', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ success: false, message: 'Email requerido.' });
+  try {
+    const [users] = await masterPool.query('SELECT name, is_verified FROM global_directory WHERE email = ?', [email]);
+    if (users.length === 0) return res.status(404).json({ success: false, message: 'Correo no encontrado.' });
+    if (users[0].is_verified) return res.json({ success: true, message: 'La cuenta ya está verificada.' });
+
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const newExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await masterPool.execute(
+      'UPDATE global_directory SET verification_code = ?, verification_expires = ? WHERE email = ?',
+      [newCode, newExpires, email]
+    );
+
+    const settings = await getSystemSettings();
+    const smtp = settings.smtpConfig || {};
+    if (!smtp.smtpHost) return res.status(500).json({ success: false, message: 'SMTP no configurado.' });
+    const transporter = nodemailer.createTransport({
+      host: smtp.smtpHost, port: parseInt(smtp.smtpPort), secure: smtp.smtpSecure,
+      auth: { user: smtp.smtpUser, pass: smtp.smtpPass }, tls: { rejectUnauthorized: false }
+    });
+    await transporter.sendMail({
+      from: `"ReporTicket" <${smtp.smtpUser}>`, to: email,
+      subject: 'Nuevo código de verificación – ReporTicket',
+      html: `
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;background:#f9fafb;padding:20px;">
+          <div style="background:#1f2937;border-radius:12px 12px 0 0;padding:28px 30px;text-align:center;">
+            <h1 style="color:#fff;margin:0;">ReporTicket</h1>
+          </div>
+          <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:36px 30px;">
+            <h2 style="color:#111827;margin:0 0 8px;">Nuevo código de activación</h2>
+            <p style="color:#6b7280;margin:0 0 28px;">Hola <strong>${users[0].name}</strong>, aquí tienes tu nuevo código. Expira en <strong>24 horas</strong>.</p>
+            <div style="background:#f3f4f6;border-radius:12px;padding:24px;text-align:center;">
+              <span style="font-size:2.8rem;font-weight:800;letter-spacing:12px;color:#6366f1;font-family:monospace;">${newCode}</span>
+            </div>
+          </div>
+        </div>
+      `
+    });
+    res.json({ success: true, message: 'Nuevo código enviado a tu correo.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
 
 
 app.post('/api/login', async (req, res) => {
@@ -844,10 +969,18 @@ app.post('/api/login', async (req, res) => {
        return res.status(401).json({ success: false, message: 'Invalid credentials' });
      }
 
-     const passwordMatch = await bcrypt.compare(password, users[0].password);
-     if (!passwordMatch) {
-       return res.status(401).json({ success: false, message: 'Invalid credentials' });
-     }
+      const passwordMatch = await bcrypt.compare(password, users[0].password);
+      if (!passwordMatch) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      }
+
+      // Check if email is verified
+      if (users[0].is_verified === 0) {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Please verify your email before logging in. A verification code has been sent to your email address.' 
+        });
+      }
 
      const user = users[0];
      console.log('[DEBUG LOGIN] User from DB:', user);

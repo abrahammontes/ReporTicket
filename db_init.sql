@@ -20,18 +20,21 @@ CREATE TABLE IF NOT EXISTS system_users (
 );
 
 CREATE TABLE IF NOT EXISTS global_directory (
-    email VARCHAR(255) PRIMARY KEY,
-    user_id VARCHAR(50) NOT NULL,
-    name VARCHAR(255),
-    company_id VARCHAR(50),
-    permissions JSON,
-    password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL,
-    reset_token VARCHAR(255),
-    reset_expires DATETIME,
-    INDEX (company_id),
-    INDEX (reset_token)
-);
+     email VARCHAR(255) PRIMARY KEY,
+     user_id VARCHAR(50) NOT NULL,
+     name VARCHAR(255),
+     company_id VARCHAR(50),
+     permissions JSON,
+     password VARCHAR(255) NOT NULL,
+     role VARCHAR(50) NOT NULL,
+     reset_token VARCHAR(255),
+     reset_expires DATETIME,
+     verification_code VARCHAR(10),
+     verification_expires DATETIME,
+     is_verified TINYINT(1) DEFAULT 0,
+     INDEX (company_id),
+     INDEX (reset_token)
+ );
 
 CREATE TABLE IF NOT EXISTS global_settings (
     setting_key VARCHAR(50) PRIMARY KEY,
@@ -43,20 +46,21 @@ CREATE TABLE IF NOT EXISTS global_settings (
 -- These tables include company_id to allow multi-tenancy in one DB
 
 CREATE TABLE IF NOT EXISTS company_users (
-    id VARCHAR(50) PRIMARY KEY,
-    company_id VARCHAR(50) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'supervisor', 'agent', 'customer') DEFAULT 'customer',
-    phone VARCHAR(20),
-    extension VARCHAR(10),
-    photo LONGTEXT,
-    permissions JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY (company_id, email),
-    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
-);
+     id VARCHAR(50) PRIMARY KEY,
+     company_id VARCHAR(50) NOT NULL,
+     name VARCHAR(255) NOT NULL,
+     email VARCHAR(255) NOT NULL,
+     password VARCHAR(255) NOT NULL,
+     role ENUM('admin', 'supervisor', 'agent', 'customer') DEFAULT 'customer',
+     phone VARCHAR(20),
+     extension VARCHAR(10),
+     photo LONGTEXT,
+     permissions JSON,
+     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+     is_verified TINYINT(1) DEFAULT 0,
+     UNIQUE KEY (company_id, email),
+     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+ );
 
 CREATE TABLE IF NOT EXISTS tickets (
     id VARCHAR(50) PRIMARY KEY,
