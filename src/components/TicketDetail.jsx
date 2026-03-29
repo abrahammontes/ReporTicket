@@ -13,6 +13,10 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
   const [pendingUpdates, setPendingUpdates] = useState({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [agents, setAgents] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
 
   // Ref for auto-resize
   const textareaRef = useRef(null);
@@ -109,58 +113,70 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
     }).catch(console.error);
   };
 
-  const handleSaveSettings = async () => {
-    try {
-      const result = await dbService.updateTicket(localTicket.id, pendingUpdates);
-      if (result.success) {
-        setLocalTicket(prev => ({ ...prev, ...pendingUpdates }));
-        setPendingUpdates({});
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 3000);
-        if (onUpdate) onUpdate();
-      }
-    } catch (err) {
-      console.error('Error saving settings:', err);
-    }
-  };
+   const handleSaveSettings = async () => {
+     setIsSaving(true);
+     setSaveMessage(t('savingTicket')); // "guardando ticket"
+     try {
+       const result = await dbService.updateTicket(localTicket.id, pendingUpdates);
+       if (result.success) {
+         setLocalTicket(prev => ({ ...prev, ...pendingUpdates }));
+         setPendingUpdates({});
+         setShowSuccess(true);
+         setTimeout(() => setShowSuccess(false), 3000);
+         if (onUpdate) onUpdate();
+       }
+     } catch (err) {
+       console.error('Error saving settings:', err);
+     } finally {
+       setIsSaving(false);
+       setSaveMessage('');
+     }
+   };
 
-  const handleAddNote = async () => {
-    if (!newNote.trim()) return;
-    let notes = localTicket.notes || [];
-    if (typeof notes === 'string') {
-      try {
-        notes = JSON.parse(notes);
-      } catch (e) {
-        notes = [];
-      }
-    }
-    if (!Array.isArray(notes)) notes = [];
+   const handleAddNote = async () => {
+     if (!newNote.trim()) return;
+     setIsSaving(true);
+     setSaveMessage(t('savingTicket')); // "guardando ticket"
+     let notes = localTicket.notes || [];
+     if (typeof notes === 'string') {
+       try {
+         notes = JSON.parse(notes);
+       } catch (e) {
+         notes = [];
+       }
+     }
+     if (!Array.isArray(notes)) notes = [];
 
-    const noteData = {
-      id: Date.now(),
-      text: newNote,
-      type: isInternal ? 'internal' : 'public',
-      date: new Date().toLocaleString(),
-      attachments: attachments
-    };
-    
-    try {
-      const result = await dbService.updateTicket(localTicket.id, {
-        notes: [...notes, noteData]
-      });
-      if (result.success) {
-        setLocalTicket(prev => ({
-          ...prev,
-          notes: [...(prev.notes || []), noteData]
-        }));
-        setNewNote('');
-        setAttachments([]);
-        if (onUpdate) onUpdate();
-      }
-    } catch (err) {
-      console.error('Error adding note:', err);
-    }
-  };
+     const noteData = {
+       id: Date.now(),
+       text: newNote,
+       type: isInternal ? 'internal' : 'public',
+       date: new Date().toLocaleString(),
+       attachments: attachments
+     };
+     
+     try {
+       const result = await dbService.updateTicket(localTicket.id, {
+         notes: [...notes, noteData]
+       });
+       if (result.success) {
+         setLocalTicket(prev => ({
+           ...prev,
+           notes: [...(prev.notes || []), noteData]
+         }));
+         setNewNote('');
+         setAttachments([]);
+         setShowSuccess(true);
+         setTimeout(() => setShowSuccess(false), 3000);
+         if (onUpdate) onUpdate();
+       }
+     } catch (err) {
+       console.error('Error adding note:', err);
+     } finally {
+       setIsSaving(false);
+       setSaveMessage('');
+     }
+   };
 
   const handleNoteChange = (e) => {
     const value = e.target.value;
@@ -479,20 +495,20 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
           <div className="glass-panel" style={{ padding: '1.5rem', position: 'sticky', top: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ fontSize: '1rem', margin: 0 }}>{t('settings')}</h3>
-              <button
-                className="btn-primary"
-                onClick={handleSaveSettings}
-                disabled={!hasChanges}
-                style={{
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.8rem',
-                  opacity: hasChanges ? 1 : 0.4,
-                  cursor: hasChanges ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.3s ease'
-                }}
-              >
-                {t('saveChanges')}
-              </button>
+               <button
+                 className="btn-primary"
+                 onClick={handleSaveSettings}
+                 disabled={!hasChanges || isSaving}
+                 style={{
+                   padding: '0.4rem 0.8rem',
+                   fontSize: '0.8rem',
+                   opacity: (!hasChanges || isSaving) ? 0.4 : 1,
+                   cursor: (!hasChanges || isSaving) ? 'not-allowed' : 'pointer',
+                   transition: 'all 0.3s ease'
+                 }}
+               >
+                 {isSaving ? saveMessage : t('saveChanges')}
+               </button>
             </div>
             {showSuccess && (
               <div style={{
