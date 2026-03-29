@@ -10,7 +10,6 @@ import Profile from './components/Profile';
 import AdminPanel from './components/AdminPanel';
 import UserGuide from './components/UserGuide';
 import ResetPassword from './components/ResetPassword';
-import VerifyEmail from './components/VerifyEmail';
 import { translations } from './translations';
 import { dbService } from './services/db';
 
@@ -71,7 +70,6 @@ function App() {
   }, [allTickets]);
   const [authError, setAuthError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
-  const [pendingVerificationEmail, setPendingVerificationEmail] = useState(null);
 
   const t = (key) => (translations[language] && translations[language][key]) || key;
 
@@ -132,14 +130,18 @@ function App() {
   const handleRegister = async (userData) => {
     setAuthError(null);
     try {
-      const regResult = await dbService.registerCompany(null, userData);
-      if (regResult.needsVerification) {
-        setPendingVerificationEmail(regResult.email || userData.email);
-        setView('verifyEmail');
-      } else {
-        setSuccessMsg(t('registrationSuccess'));
-        setView('login');
-      }
+      // 1. Create company and its database
+      const regResult = await dbService.registerCompany(userData.companyName, {
+        name: userData.name,
+        email: userData.email,
+        password: userData.password
+      });
+
+      // 2. Refresh local context and notify
+      setSuccessMsg(t('registrationSuccess'));
+      setView('login');
+      
+      // Optional: Automatic notifications can stay in backend register-company logic
     } catch (err) {
       if (err.message.includes('user_exists')) {
         setAuthError(t('errorUserExists'));
@@ -152,19 +154,13 @@ function App() {
 
   const renderView = () => {
     // Non-layout views
-    const isPublicView = ['landing', 'register', 'login', 'resetPassword', 'verifyEmail'].includes(view);
+    const isPublicView = ['landing', 'register', 'login', 'resetPassword'].includes(view);
     
     let publicContent = null;
     if (view === 'landing') publicContent = <Landing onGetStarted={() => handleViewChange('register')} onLogin={() => handleViewChange('login')} theme={theme} setTheme={setTheme} t={t} language={language} setLanguage={setLanguage} />;
     if (view === 'register') publicContent = <Register onRegister={handleRegister} onLogin={() => handleViewChange('login')} onBack={() => handleViewChange('landing')} t={t} error={authError} language={language} setLanguage={setLanguage} />;
     if (view === 'login') publicContent = <Login onLogin={handleLogin} onRegister={() => handleViewChange('register')} onBack={() => handleViewChange('landing')} theme={theme} t={t} error={authError} successMsg={successMsg} language={language} setLanguage={setLanguage} />;
     if (view === 'resetPassword') publicContent = <ResetPassword theme={theme} t={t} onBack={() => handleViewChange('login')} language={language} setLanguage={setLanguage} />;
-    if (view === 'verifyEmail') publicContent = <VerifyEmail
-      email={pendingVerificationEmail}
-      t={t}
-      onVerified={() => { setSuccessMsg('¡Cuenta activada! Ya puedes iniciar sesión.'); setPendingVerificationEmail(null); setView('login'); }}
-      onBack={() => handleViewChange('login')}
-    />;
 
     if (isPublicView) {
       return (

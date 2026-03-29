@@ -170,48 +170,31 @@ app.get('/api/health-check', async (req, res) => {
 const companyPools = new Map();
 
 const getCompanyPool = async (companyId) => {
-  // Return cached pool if exists
-  if (companyPools.has(companyId)) {
-    return companyPools.get(companyId);
-  }
-
-  // In single DB mode, all companies use the master pool
   if (process.env.DB_MODE === 'single') {
     return masterPool;
   }
 
-  // In multiple DB mode, get company info from master DB
-  try {
-    const [companies] = await masterPool.query(
-      'SELECT db_name FROM companies WHERE id = ?',
-      [companyId]
-    );
-
-    if (companies.length === 0) {
-      throw new Error(`Company not found: ${companyId}`);
-    }
-
-    const dbName = companies[0].db_name;
-
-    // Create new pool for this company's database
-    const pool = mysql.createPool({
-      host: dbConfig.host,
-      port: dbConfig.port,
-      user: dbConfig.user,
-      password: dbConfig.password,
-      database: dbName,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0
-    });
-
-    // Cache the pool
-    companyPools.set(companyId, pool);
-    return pool;
-  } catch (error) {
-    console.error(`Error creating pool for company ${companyId}:`, error);
-    throw error;
+  if (companyPools.has(companyId)) {
+    return companyPools.get(companyId);
   }
+
+  const [companies] = await masterPool.query('SELECT db_name FROM companies WHERE id = ?', [companyId]);
+  if (companies.length === 0) return null;
+
+  const dbName = companies[0].db_name;
+  const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASS || '',
+    database: dbName,
+    waitForConnections: true,
+    connectionLimit: 5,
+    queueLimit: 0
+  });
+
+  companyPools.set(companyId, pool);
+  return pool;
 };
 
 // Middleware to resolve company pool
@@ -239,99 +222,81 @@ const withCompanyPool = async (req, res, next) => {
 // Ticket Notification Helpers
 const getTicketInvolvedParties = async (ticketId, companyId, db) => {
   try {
-    console.log(`[NOTIF] Searching involved parties for ticket ${ticketId} in company ${companyId}`);
-
-    const ticketQuery =
-      'SELECT t.id, t.subject, t.priority, t.status, t.user_id, t.agent_id, t.company_id, t.created_at, t.updated_at, ' +
-      'u.email AS customer_email, u.name AS customer_name ' +
-      'FROM tickets t ' +
-      'LEFT JOIN company_users u ON t.user_id = u.id ' +
-      'WHERE t.id = ?';
-
-    const [tickets] = await db.query(ticketQuery, [ticketId]);
+    console.log(`Searching involved parties for ticket ${ticketId} in company ${companyId}`);
+let ticketQuery = 'SELECT t.subject, t.user_id, t.agent_id, t.company_id, t.created_at, t.updated_at, u.email as customer_email, u.name as customer_name ' +
+                       'FROM tickets t ' +
+                       'LEFT JOIN company_users u ON t.user_id = u.id AND (u.company_id = t.company_id OR ? = "master") ' +
+                       'WHERE t.id = ?';
+    let ticketParams = [companyId, ticketId];
+    
+    const [tickets] = await db.query(ticketQuery, ticketParams);
     if (tickets.length === 0) {
-      console.warn(`[NOTIF] Ticket ${ticketId} not found.`);
+      console.warn(`[NOTIF] Ticket ${ticketId} not found in database search.`);
       return null;
     }
     const ticket = tickets[0];
     const actualCompanyId = ticket.company_id || companyId;
+    console.log(`[NOTIF] Found ticket: ${ticket.subject}, customer: ${ticket.customer_email}, actualCompanyId: ${actualCompanyId}`);
 
     const involved = [];
-
-    // 1. Customer (ticket creator)
     if (ticket.customer_email) {
       involved.push({ email: ticket.customer_email, name: ticket.customer_name, role: 'customer' });
     }
 
-    // 2. Assigned agent
+    // 2. Get Agent info if assigned
     if (ticket.agent_id) {
-      const agentQ = process.env.DB_MODE === 'single'
-        ? 'SELECT email, name FROM company_users WHERE id = ? AND company_id = ?'
-        : 'SELECT email, name FROM company_users WHERE id = ?';
-      const agentP = process.env.DB_MODE === 'single' ? [ticket.agent_id, actualCompanyId] : [ticket.agent_id];
-      const [agents] = await db.query(agentQ, agentP);
-      if (agents.length > 0 && agents[0].email && !involved.some(p => p.email === agents[0].email)) {
-        involved.push({ email: agents[0].email, name: agents[0].name, role: 'agent' });
-      }
+        let agentQuery = 'SELECT email, name FROM company_users WHERE id = ?';
+        let agentParams = [ticket.agent_id];
+        if (process.env.DB_MODE === 'single') {
+            agentQuery += ' AND company_id = ?';
+            agentParams.push(actualCompanyId);
+        }
+        const [agents] = await db.query(agentQuery, agentParams);
+        if (agents.length > 0 && agents[0].email) {
+            console.log(`[NOTIF] Adding agent: ${agents[0].email}`);
+            involved.push({ email: agents[0].email, name: agents[0].name, role: 'agent' });
+        }
     }
 
-    // 3. Supervisors of the same company
-    const supervisorQ = process.env.DB_MODE === 'single'
-      ? "SELECT email, name FROM company_users WHERE role = 'supervisor' AND company_id = ?"
-      : "SELECT email, name FROM company_users WHERE role = 'supervisor'";
-    const supervisorP = process.env.DB_MODE === 'single' ? [actualCompanyId] : [];
-    const [supervisors] = await db.query(supervisorQ, supervisorP);
+    // 3. Get Supervisors info
+    let supervisorQuery = "SELECT email, name FROM company_users WHERE role = 'supervisor'";
+    let supervisorParams = [];
+    if (process.env.DB_MODE === 'single') {
+        supervisorQuery += ' AND company_id = ?';
+        supervisorParams.push(actualCompanyId);
+    }
+    const [supervisors] = await db.query(supervisorQuery, supervisorParams);
     supervisors.forEach(s => {
-      if (s.email && !involved.some(p => p.email === s.email)) {
-        involved.push({ email: s.email, name: s.name, role: 'supervisor' });
-      }
+        if (s.email && !involved.some(p => p.email === s.email)) {
+            console.log(`[NOTIF] Adding supervisor: ${s.email}`);
+            involved.push({ email: s.email, name: s.name, role: 'supervisor' });
+        }
     });
-
-    // 4. Admins of the same company
-    const adminQ = process.env.DB_MODE === 'single'
-      ? "SELECT email, name FROM company_users WHERE role = 'admin' AND company_id = ?"
-      : "SELECT email, name FROM company_users WHERE role = 'admin'";
-    const adminP = process.env.DB_MODE === 'single' ? [actualCompanyId] : [];
-    const [admins] = await db.query(adminQ, adminP);
-    admins.forEach(a => {
-      if (a.email && !involved.some(p => p.email === a.email)) {
-        involved.push({ email: a.email, name: a.name, role: 'admin' });
-      }
-    });
-
-    console.log(`[NOTIF] Involved parties for ${ticketId}: ${involved.map(p => p.email).join(', ') || 'none'}`);
 
     return {
-      subject: ticket.subject,
-      priority: ticket.priority,
-      status: ticket.status,
-      created_at: ticket.created_at,
-      updated_at: ticket.updated_at,
-      parties: involved
+        subject: ticket.subject,
+        parties: involved
     };
   } catch (err) {
-    console.error('[NOTIF] Error getting involved parties:', err);
+    console.error('Error getting involved parties:', err);
     return null;
   }
 };
 
-const priorityLabel = { low: 'Baja', medium: 'Media', high: 'Alta' };
-const statusLabel = { new: 'Nuevo', open: 'Abierto', inprogress: 'En Progreso', awaiting: 'En Espera', old: 'Antiguo', closed: 'Cerrado' };
-
 const sendTicketEmailNotification = async (ticketId, companyId, db, updateType, updateDetails = {}) => {
   try {
-    console.log(`[NOTIF] Triggered: Ticket ${ticketId} | Type: ${updateType}`);
-
+    console.log(`[NOTIF] Triggered for Ticket: ${ticketId}, Company: ${companyId}, Type: ${updateType}`);
     const settings = await getSystemSettings();
     const config = settings.smtpConfig || {};
-    if (!config.smtpHost) {
-      console.warn(`[NOTIF] SMTP not configured. Skipping notification for ${ticketId}.`);
+    if (!config || !config.smtpHost) {
+      console.warn(`[NOTIF] SMTP not configured in global_settings. Skipping notification for ${ticketId}.`);
       return;
     }
+    console.log(`[NOTIF] Using SMTP: ${config.smtpHost}:${config.smtpPort} (${config.smtpUser})`);
 
     const data = await getTicketInvolvedParties(ticketId, companyId, db);
     if (!data || data.parties.length === 0) {
-      console.warn(`[NOTIF] No recipients found for ticket ${ticketId}.`);
+      console.warn('No involved parties found for ticket:', ticketId);
       return;
     }
 
@@ -343,107 +308,80 @@ const sendTicketEmailNotification = async (ticketId, companyId, db, updateType, 
       tls: { rejectUnauthorized: false }
     });
 
-    const fmt = (d) => d ? new Date(d).toLocaleString('es-MX', {
-      timeZone: 'America/Mexico_City', dateStyle: 'long', timeStyle: 'short'
-    }) : '—';
+     const creationTimestamp = new Date(data.created_at).toLocaleString('es-MX', { 
+         timeZone: 'America/Mexico_City',
+         dateStyle: 'long',
+         timeStyle: 'medium'
+     });
+     
+     const modificationTimestamp = new Date(data.updated_at).toLocaleString('es-MX', { 
+         timeZone: 'America/Mexico_City',
+         dateStyle: 'long',
+         timeStyle: 'medium'
+     });
 
     for (const party of data.parties) {
-      let eventTitle = '';
-      let eventBody = '';
-      let eventColor = '#6366f1';
+        let title = '';
+        let body = '';
+        
+        switch (updateType) {
+            case 'new_ticket':
+                title = 'Nuevo Ticket Registrado';
+                body = `Se ha creado el ticket <strong>#${ticketId}</strong> con el asunto: <em>${data.subject}</em>.`;
+                break;
+            case 'status_change':
+                title = 'Actualización de Estado';
+                body = `El ticket <strong>#${ticketId}</strong> ha cambiado su estado a <strong>${updateDetails.newStatus || 'actualizado'}</strong>.`;
+                break;
+            case 'new_note':
+                if (updateDetails.isInternal && party.role === 'customer') continue; 
+                title = 'Nueva Respuesta en Ticket';
+                body = `Se ha añadido una nueva respuesta al ticket <strong>#${ticketId}</strong>.`;
+                break;
+            default:
+                title = 'Actualización de Ticket';
+                body = `Se ha realizado una modificación en el ticket <strong>#${ticketId}</strong>.`;
+        }
 
-      switch (updateType) {
-        case 'new_ticket':
-          eventTitle = '🎫 Nuevo Ticket Registrado';
-          eventBody = `Se ha creado un nuevo ticket en el sistema.`;
-          eventColor = '#10b981';
-          break;
-        case 'status_change':
-          eventTitle = '🔄 Actualización de Estado';
-          eventBody = `El estado del ticket ha cambiado a <strong>${statusLabel[updateDetails.newStatus] || updateDetails.newStatus}</strong>.`;
-          eventColor = '#f59e0b';
-          break;
-        case 'new_note':
-          if (updateDetails.isInternal && party.role === 'customer') continue; // Don't notify customer on internal notes
-          eventTitle = '💬 Nueva Respuesta';
-          eventBody = `Se ha añadido una nueva ${updateDetails.isInternal ? 'nota interna' : 'respuesta'} al ticket.`;
-          eventColor = '#6366f1';
-          break;
-        default:
-          eventTitle = '📋 Actualización de Ticket';
-          eventBody = `Se ha realizado una modificación en el ticket.`;
-      }
+        const mailOptions = {
+            from: `"ReporTicket Notificaciones" <${config.smtpUser}>`,
+            to: party.email,
+            subject: `[${ticketId}] ${title}: ${data.subject}`,
+            html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; color: #333;">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <h1 style="color: #6366f1; margin: 0;">ReporTicket</h1>
+                        <p style="color: #666; font-size: 0.9rem;">Gestión de Servicios Administrados</p>
+                    </div>
+                    <h2 style="color: #1f2937; border-bottom: 2px solid #f3f4f6; padding-bottom: 10px;">${title}</h2>
+                    <p>Hola <strong>${party.name}</strong>,</p>
+                    <p style="line-height: 1.5;">${body}</p>
+                    
+                     <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #6366f1; margin: 20px 0;">
+                         <p style="margin: 0; font-size: 0.9rem; color: #4b5563;">
+                             <strong>Fecha de Creación:</strong> ${creationTimestamp}<br>
+                             <strong>Última Modificación:</strong> ${modificationTimestamp}
+                         </p>
+                     </div>
 
-      const html = `
-        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb; padding: 20px;">
-          <div style="background: #1f2937; border-radius: 12px 12px 0 0; padding: 24px 30px; text-align: center;">
-            <h1 style="color: #fff; margin: 0; font-size: 1.5rem; letter-spacing: -0.5px;">ReporTicket</h1>
-            <p style="color: #9ca3af; margin: 4px 0 0; font-size: 0.85rem;">Sistema de Gestión de Tickets</p>
-          </div>
-          <div style="background: #fff; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb; padding: 30px;">
-            <div style="border-left: 4px solid ${eventColor}; padding-left: 16px; margin-bottom: 24px;">
-              <h2 style="color: #111827; margin: 0 0 4px; font-size: 1.1rem;">${eventTitle}</h2>
-              <p style="color: #6b7280; margin: 0; font-size: 0.9rem;">${eventBody}</p>
-            </div>
+                    <p style="font-size: 0.85rem; color: #9ca3af; margin-top: 30px; border-top: 1px solid #f3f4f6; padding-top: 15px;">
+                        Este es un correo automático generado por el sistema de trazabilidad de ReporTicket. 
+                        No es necesario responder a esta dirección.
+                    </p>
+                </div>
+            `
+        };
 
-            <p style="margin: 0 0 20px; color: #374151;">Hola <strong>${party.name}</strong>,</p>
-
-            <div style="background: #f3f4f6; border-radius: 8px; padding: 20px; margin: 0 0 24px;">
-              <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem; color: #374151;">
-                <tr>
-                  <td style="padding: 6px 0; font-weight: 600; width: 40%; color: #6b7280;">N° Ticket</td>
-                  <td style="padding: 6px 0;"><strong>#${ticketId}</strong></td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Asunto</td>
-                  <td style="padding: 6px 0;">${data.subject}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Prioridad</td>
-                  <td style="padding: 6px 0;">${priorityLabel[data.priority] || data.priority || '—'}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Estado</td>
-                  <td style="padding: 6px 0;">${statusLabel[data.status] || data.status || '—'}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Creado</td>
-                  <td style="padding: 6px 0;">${fmt(data.created_at)}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; font-weight: 600; color: #6b7280;">Última actualización</td>
-                  <td style="padding: 6px 0;">${fmt(data.updated_at)}</td>
-                </tr>
-              </table>
-            </div>
-
-            <p style="font-size: 0.8rem; color: #9ca3af;">
-              Este es un correo automático generado por ReporTicket. Por favor, no respondas directamente a este mensaje.
-            </p>
-          </div>
-          <div style="background: #f3f4f6; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px; padding: 16px 30px; text-align: center;">
-            <p style="margin: 0; font-size: 0.75rem; color: #9ca3af;">© ${new Date().getFullYear()} ReporTicket · Notificaciones automáticas</p>
-          </div>
-        </div>
-      `;
-
-      try {
-        await transporter.sendMail({
-          from: `"ReporTicket Notificaciones" <${config.smtpUser}>`,
-          to: party.email,
-          subject: `[#${ticketId}] ${eventTitle.replace(/^.\s/, '')} – ${data.subject}`,
-          html
-        });
-        console.log(`[NOTIF] Email sent to ${party.email} (${party.role})`);
-      } catch (mailErr) {
-        console.error(`[NOTIF] Failed to send to ${party.email}:`, mailErr.message);
-      }
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (mailErr) {
+            console.error(`Failed to send email to ${party.email}:`, mailErr.message);
+        }
     }
   } catch (err) {
-    console.error('[NOTIF] System error:', err);
+    console.error('Notification system error:', err);
   }
 };
-
 
 app.post('/api/send-test-email', async (req, res) => {
 
@@ -793,247 +731,110 @@ app.post('/api/notify-registration', async (req, res) => {
 });
 
 app.post('/api/register-company', async (req, res) => {
-  const { name, email, password, phone, extension, companyName } = req.body;
-  console.log('[REGISTER] User:', email, '| Company:', companyName || '(none)');
+  const { name, adminUser } = req.body;
+  console.log('Registering company:', name);
+  console.log('Admin user data:', adminUser);
+  const companyId = 'comp-' + Date.now();
+  const dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
 
   try {
-    // Check if email already exists
-    const [existing] = await masterPool.query('SELECT email FROM global_directory WHERE email = ?', [email]);
-    if (existing.length > 0) {
-      return res.status(409).json({ success: false, message: 'user_exists: El correo ya está registrado.' });
+    // 1. Create entry in master
+    await masterPool.execute(
+      'INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)',
+      [companyId, name, dbName]
+    );
+
+    // 2. Create the physical database (Only in multi mode)
+    if (process.env.DB_MODE !== 'single') {
+      await masterPool.query(`CREATE DATABASE \`${dbName}\``);
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const userId = 'user-' + Date.now();
-    const customerPermissions = JSON.stringify({ viewAllTickets: false, assignTickets: false, manageUsers: false, manageCompanies: false });
+    // 3. Initialize tables and create admin
+    const isSingle = process.env.DB_MODE === 'single';
+    const targetPool = isSingle ? masterPool : mysql.createPool({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASS || '',
+      database: dbName,
+      multipleStatements: true
+    });
 
-    // Generate 6-digit verification code valid for 24h
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    try {
+      const initSql = isSingle ? "" : `
+        CREATE TABLE IF NOT EXISTS company_users (
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            role ENUM('admin', 'supervisor', 'customer') DEFAULT 'customer',
+            photo LONGTEXT,
+            permissions JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS tickets (
+            id VARCHAR(20) PRIMARY KEY,
+            subject VARCHAR(255) NOT NULL,
+            description TEXT,
+            user_id VARCHAR(50),
+            status ENUM('new', 'open', 'inprogress', 'awaiting', 'old', 'closed') DEFAULT 'new',
+            priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES company_users(id)
+        );
+        CREATE TABLE IF NOT EXISTS ticket_notes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ticket_id VARCHAR(20) NOT NULL,
+            company_id VARCHAR(50),
+            user_id VARCHAR(50),
+            content TEXT NOT NULL,
+            is_internal TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ticket_id) REFERENCES tickets(id)
+        );
+      `;
 
-    // Helper: send verification email
-    const sendVerificationEmail = async () => {
-      try {
-        const settings = await getSystemSettings();
-        const smtp = settings.smtpConfig || {};
-        if (!smtp.smtpHost) {
-          console.warn('[REGISTER] SMTP not configured, skipping verification email.');
-          return;
-        }
-        const transporter = nodemailer.createTransport({
-          host: smtp.smtpHost,
-          port: parseInt(smtp.smtpPort),
-          secure: smtp.smtpSecure,
-          auth: { user: smtp.smtpUser, pass: smtp.smtpPass },
-          tls: { rejectUnauthorized: false }
-        });
-        await transporter.sendMail({
-          from: `"ReporTicket" <${smtp.smtpUser}>`,
-          to: email,
-          subject: 'Activa tu cuenta – ReporTicket',
-          html: `
-            <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;background:#f9fafb;padding:20px;">
-              <div style="background:#1f2937;border-radius:12px 12px 0 0;padding:28px 30px;text-align:center;">
-                <h1 style="color:#fff;margin:0;font-size:1.6rem;">ReporTicket</h1>
-                <p style="color:#9ca3af;margin:4px 0 0;font-size:0.85rem;">Sistema de Gestión de Tickets</p>
-              </div>
-              <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:36px 30px;">
-                <h2 style="color:#111827;margin:0 0 8px;font-size:1.2rem;">Activa tu cuenta</h2>
-                <p style="color:#6b7280;margin:0 0 28px;font-size:0.95rem;">Hola <strong>${name}</strong>, usa el siguiente código para activar tu cuenta. Expira en <strong>24 horas</strong>.</p>
-                <div style="background:#f3f4f6;border-radius:12px;padding:24px;text-align:center;margin:0 0 28px;">
-                  <span style="font-size:2.8rem;font-weight:800;letter-spacing:12px;color:#6366f1;font-family:monospace;">${verificationCode}</span>
-                </div>
-                <p style="color:#9ca3af;font-size:0.8rem;margin:0;">Si no creaste esta cuenta, puedes ignorar este correo.</p>
-              </div>
-              <div style="background:#f3f4f6;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px;padding:14px 30px;text-align:center;">
-                <p style="margin:0;font-size:0.75rem;color:#9ca3af;">© ${new Date().getFullYear()} ReporTicket · Notificaciones automáticas</p>
-              </div>
-            </div>
-          `
-        });
-        console.log('[REGISTER] Verification email sent to:', email);
-      } catch (mailErr) {
-        console.error('[REGISTER] Failed to send verification email:', mailErr.message);
+      if (initSql) await targetPool.query(initSql);
+
+      // 4. Create the initial admin user
+      const adminId = 'user-' + Date.now();
+      const defaultPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
+      const hashedAdminPassword = await bcrypt.hash(adminUser.password, 10);
+      if (isSingle) {
+        await targetPool.execute(
+          'INSERT INTO company_users (id, company_id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [adminId, companyId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
+        );
+      } else {
+        await targetPool.execute(
+          'INSERT INTO company_users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
+          [adminId, adminUser.name, adminUser.email, hashedAdminPassword, 'admin', defaultPermissions]
+        );
       }
-    };
 
-    // ── CASE 1: No company → unassigned customer (needs verification) ──────────
-    if (!companyName) {
+      // 5. Sync with global directory
       await masterPool.execute(
-        'INSERT INTO company_users (id, company_id, name, email, password, role, permissions, is_verified) VALUES (?, NULL, ?, ?, ?, ?, ?, 0)',
-        [userId, name, email, hashedPassword, 'customer', customerPermissions]
+        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [adminUser.email, adminId, adminUser.name, companyId, defaultPermissions, hashedAdminPassword, 'admin']
       );
-      await masterPool.execute(
-        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role, verification_code, verification_expires, is_verified) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, 0)',
-        [email, userId, name, customerPermissions, hashedPassword, 'customer', verificationCode, verificationExpires]
-      );
-      await sendVerificationEmail();
-      return res.json({ success: true, userId, needsVerification: true, email, message: 'Código de verificación enviado al correo.' });
+
+      if (!isSingle) await targetPool.end();
+
+      res.json({ success: true, companyId, dbName, message: 'Company and database created successfully.' });
+    } catch (innerError) {
+      if (!isSingle) await targetPool.end();
+      throw innerError;
     }
-
-    // ── CASE 2: Company name provided → look it up ────────────────────────────
-    const [existingCompanies] = await masterPool.query('SELECT id, db_name FROM companies WHERE name = ?', [companyName]);
-
-    if (existingCompanies.length > 0) {
-      const companyId = existingCompanies[0].id;
-      await masterPool.execute(
-        'INSERT INTO company_users (id, company_id, name, email, password, role, permissions, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 0)',
-        [userId, companyId, name, email, hashedPassword, 'customer', customerPermissions]
-      );
-      await masterPool.execute(
-        'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role, verification_code, verification_expires, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
-        [email, userId, name, companyId, customerPermissions, hashedPassword, 'customer', verificationCode, verificationExpires]
-      );
-      await sendVerificationEmail();
-      return res.json({ success: true, userId, companyId, needsVerification: true, email, message: 'Código de verificación enviado al correo.' });
-    }
-
-     // ── CASE 3: New company → superadmin only (auto-verified) ─────────────────
-     const userRole = req.headers['x-user-role'];
-     if (userRole !== 'superadmin') {
-       return res.status(403).json({ success: false, message: 'La creación de nuevas empresas está restringida a administradores centrales.' });
-     }
-
-     const companyId = 'comp-' + Date.now();
-     const dbName = (process.env.DB_PREFIX || '') + 'reporticket_' + companyId;
-     const adminPermissions = JSON.stringify({ viewAllTickets: true, assignTickets: true, manageUsers: true, manageCompanies: false });
-
-     await masterPool.execute('INSERT INTO companies (id, name, db_name) VALUES (?, ?, ?)', [companyId, companyName, dbName]);
-     await masterPool.execute(
-       'INSERT INTO company_users (id, company_id, name, email, password, role, permissions, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
-       [userId, companyId, name, email, hashedPassword, 'admin', adminPermissions]
-     );
-     await masterPool.execute(
-       'INSERT INTO global_directory (email, user_id, name, company_id, permissions, password, role, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
-       [email, userId, name, companyId, adminPermissions, hashedPassword, 'admin']
-     );
-
-     // In multiple DB mode, create database and initialize tables for the new company
-     if (process.env.DB_MODE !== 'single') {
-       try {
-         // Create database
-         await masterPool.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
-         
-         // Initialize tables in the new database
-         const tempConnection = await mysql.createPool({
-           host: dbConfig.host,
-           port: dbConfig.port,
-           user: dbConfig.user,
-           password: dbConfig.password,
-           database: dbName,
-           waitForConnections: true,
-           connectionLimit: 5,
-           queueLimit: 0
-         });
-         
-         const schema = fs.readFileSync('db_init.sql', 'utf8');
-         const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
-         
-         for (const statement of statements) {
-           await tempConnection.query(statement);
-         }
-         
-         await tempConnection.end();
-         
-         console.log(`[REGISTER] Database ${dbName} created and initialized for company ${companyId}`);
-       } catch (dbError) {
-         console.error('[REGISTER] Error creating/initializing database:', dbError);
-         // We don't fail the registration if DB creation fails, but we log it
-         // The company will still be registered in master DB
-       }
-     }
-
-     return res.json({ success: true, userId, companyId, dbName, needsVerification: false, message: 'Empresa y administrador creados exitosamente.' });
-
   } catch (error) {
-    console.error('[REGISTER] Error:', error);
+    console.error('Registration Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
-
-// Email verification endpoint
-app.post('/api/auth/verify-email', async (req, res) => {
-  const { email, code } = req.body;
-  if (!email || !code) return res.status(400).json({ success: false, message: 'Email y código son requeridos.' });
-  try {
-    const [users] = await masterPool.query(
-      'SELECT user_id, verification_code, verification_expires, is_verified FROM global_directory WHERE email = ?',
-      [email]
-    );
-    if (users.length === 0) return res.status(404).json({ success: false, message: 'Correo no encontrado.' });
-    const user = users[0];
-
-    if (user.is_verified) return res.json({ success: true, message: 'La cuenta ya estaba verificada.' });
-    if (user.verification_code !== code) return res.status(400).json({ success: false, message: 'Código incorrecto. Verifica tu correo e inténtalo de nuevo.' });
-    if (new Date() > new Date(user.verification_expires)) return res.status(400).json({ success: false, message: 'El código ha expirado. Solicita uno nuevo.' });
-
-    // Mark as verified in both tables
-    await masterPool.execute(
-      'UPDATE global_directory SET is_verified = 1, verification_code = NULL, verification_expires = NULL WHERE email = ?',
-      [email]
-    );
-    await masterPool.execute('UPDATE company_users SET is_verified = 1 WHERE id = ?', [user.user_id]);
-
-    res.json({ success: true, message: '¡Cuenta activada correctamente! Ya puedes iniciar sesión.' });
-  } catch (error) {
-    console.error('[VERIFY] Error:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Resend verification code
-app.post('/api/auth/resend-verification', async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ success: false, message: 'Email requerido.' });
-  try {
-    const [users] = await masterPool.query('SELECT name, is_verified FROM global_directory WHERE email = ?', [email]);
-    if (users.length === 0) return res.status(404).json({ success: false, message: 'Correo no encontrado.' });
-    if (users[0].is_verified) return res.json({ success: true, message: 'La cuenta ya está verificada.' });
-
-    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const newExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await masterPool.execute(
-      'UPDATE global_directory SET verification_code = ?, verification_expires = ? WHERE email = ?',
-      [newCode, newExpires, email]
-    );
-
-    const settings = await getSystemSettings();
-    const smtp = settings.smtpConfig || {};
-    if (!smtp.smtpHost) return res.status(500).json({ success: false, message: 'SMTP no configurado.' });
-    const transporter = nodemailer.createTransport({
-      host: smtp.smtpHost, port: parseInt(smtp.smtpPort), secure: smtp.smtpSecure,
-      auth: { user: smtp.smtpUser, pass: smtp.smtpPass }, tls: { rejectUnauthorized: false }
-    });
-    await transporter.sendMail({
-      from: `"ReporTicket" <${smtp.smtpUser}>`, to: email,
-      subject: 'Nuevo código de verificación – ReporTicket',
-      html: `
-        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:0 auto;background:#f9fafb;padding:20px;">
-          <div style="background:#1f2937;border-radius:12px 12px 0 0;padding:28px 30px;text-align:center;">
-            <h1 style="color:#fff;margin:0;">ReporTicket</h1>
-          </div>
-          <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:36px 30px;">
-            <h2 style="color:#111827;margin:0 0 8px;">Nuevo código de activación</h2>
-            <p style="color:#6b7280;margin:0 0 28px;">Hola <strong>${users[0].name}</strong>, aquí tienes tu nuevo código. Expira en <strong>24 horas</strong>.</p>
-            <div style="background:#f3f4f6;border-radius:12px;padding:24px;text-align:center;">
-              <span style="font-size:2.8rem;font-weight:800;letter-spacing:12px;color:#6366f1;font-family:monospace;">${newCode}</span>
-            </div>
-          </div>
-        </div>
-      `
-    });
-    res.json({ success: true, message: 'Nuevo código enviado a tu correo.' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-
-
 
 app.post('/api/login', async (req, res) => {
+   const { email, password } = req.body;
+
    try {
-      const { email, password } = req.body;
       const [users] = await masterPool.query(
         'SELECT g.user_id, g.company_id, g.name, g.email, g.phone, g.extension, g.photo, g.role, g.password, c.name as company_name ' +
         'FROM global_directory g ' +
@@ -1046,18 +847,10 @@ app.post('/api/login', async (req, res) => {
        return res.status(401).json({ success: false, message: 'Invalid credentials' });
      }
 
-      const passwordMatch = await bcrypt.compare(password, users[0].password);
-      if (!passwordMatch) {
-        return res.status(401).json({ success: false, message: 'Invalid credentials' });
-      }
-
-      // Check if email is verified
-      if (users[0].is_verified === 0) {
-        return res.status(401).json({ 
-          success: false, 
-          message: 'Please verify your email before logging in. A verification code has been sent to your email address.' 
-        });
-      }
+     const passwordMatch = await bcrypt.compare(password, users[0].password);
+     if (!passwordMatch) {
+       return res.status(401).json({ success: false, message: 'Invalid credentials' });
+     }
 
      const user = users[0];
      console.log('[DEBUG LOGIN] User from DB:', user);
@@ -1462,7 +1255,6 @@ app.delete('/api/users/:id', async (req, res) => {
 
 // Ticket Operations
 app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
-  console.log('[PATCH TICKET] Request body:', req.body);
   const { status, priority, department, notes } = req.body;
   try {
     const updates = [];
@@ -1471,29 +1263,23 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
     if (priority) { updates.push('priority = ?'); params.push(priority); }
     if (department) { updates.push('department = ?'); params.push(department); }
     
-    // Handle notes update
-    if (notes !== undefined && notes !== null) {
-      updates.push('notes = ?');
-      params.push(JSON.stringify(notes));
-    }
-    
     if (updates.length > 0) {
       params.push(req.params.id);
       const query = process.env.DB_MODE === 'single'
         ? `UPDATE tickets SET ${updates.join(', ')} WHERE id = ? AND company_id = ?`
         : `UPDATE tickets SET ${updates.join(', ')} WHERE id = ?`;
       if (process.env.DB_MODE === 'single') params.push(req.companyId);
-      
+
       await req.db.execute(query, params);
     }
-    
+
     // Notification for updates (status/priority/dept)
     if (status || priority || department) {
         await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'status_change', { newStatus: status }).catch(err => console.log('[NOTIF ERR] PATCH Update:', err.message));
     }
-    
-    // Handle notes for notifications and traceability
-    if (Array.isArray(notes) && notes.length > 0) {
+
+    // Handlle notes if provided (assuming for simplicity we just store them in a notes table)
+    if (notes && notes.length > 0) {
       const latestNote = notes[notes.length - 1];
       
       // 1. Traceability Table
@@ -1506,13 +1292,46 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
           : [req.params.id, latestNote.text, latestNote.type === 'internal' ? 1 : 0]
       );
       
+      // 2. Legacy Sync (for UI visibility)
+      const [ticketRows] = await req.db.query('SELECT notes FROM tickets WHERE id = ?', [req.params.id]);
+      if (ticketRows.length > 0) {
+        let currentNotes = [];
+        try {
+            const rawNotes = ticketRows[0].notes;
+            currentNotes = typeof rawNotes === 'string' ? JSON.parse(rawNotes) : (rawNotes || []);
+            if (!Array.isArray(currentNotes)) currentNotes = [];
+        } catch (e) {
+            currentNotes = [];
+        }
+        
+        // Ensure we don't have a corrupt "string-spread" situation from frontend
+        // If 'notes' from body is just the latest note in an array, use it. 
+        // If frontend sent the full array, ensure it's valid.
+        let finalNotes;
+        if (Array.isArray(notes) && notes.length > 0) {
+            // Check if the frontend sent the full history plus the new one
+            // or if it sent something that needs appending.
+            if (notes.length > currentNotes.length) {
+                finalNotes = notes;
+            } else {
+                finalNotes = [...currentNotes, latestNote];
+            }
+        } else {
+            finalNotes = [...currentNotes, latestNote];
+        }
+        
+        await req.db.execute(
+          'UPDATE tickets SET notes = ?, updated_at = NOW() WHERE id = ?',
+          [JSON.stringify(finalNotes), req.params.id]
+        );
+      }
+      
       // 3. Notification
       await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'new_note', { isInternal: latestNote.type === 'internal' }).catch(err => console.log('[NOTIF ERR] PATCH Note:', err.message));
     }
-    
+
     res.json({ success: true, message: 'Ticket updated' });
   } catch (error) {
-    console.error('[PATCH TICKET] Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
