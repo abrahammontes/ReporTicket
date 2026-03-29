@@ -223,10 +223,10 @@ const withCompanyPool = async (req, res, next) => {
 const getTicketInvolvedParties = async (ticketId, companyId, db) => {
   try {
     console.log(`Searching involved parties for ticket ${ticketId} in company ${companyId}`);
-    let ticketQuery = 'SELECT t.subject, t.user_id, t.agent_id, t.company_id, u.email as customer_email, u.name as customer_name ' +
-                      'FROM tickets t ' +
-                      'LEFT JOIN company_users u ON t.user_id = u.id AND (u.company_id = t.company_id OR ? = "master") ' +
-                      'WHERE t.id = ?';
+let ticketQuery = 'SELECT t.subject, t.user_id, t.agent_id, t.company_id, t.created_at, t.updated_at, u.email as customer_email, u.name as customer_name ' +
+                       'FROM tickets t ' +
+                       'LEFT JOIN company_users u ON t.user_id = u.id AND (u.company_id = t.company_id OR ? = "master") ' +
+                       'WHERE t.id = ?';
     let ticketParams = [companyId, ticketId];
     
     const [tickets] = await db.query(ticketQuery, ticketParams);
@@ -308,11 +308,17 @@ const sendTicketEmailNotification = async (ticketId, companyId, db, updateType, 
       tls: { rejectUnauthorized: false }
     });
 
-    const timestamp = new Date().toLocaleString('es-MX', { 
-        timeZone: 'America/Mexico_City',
-        dateStyle: 'long',
-        timeStyle: 'medium'
-    });
+     const creationTimestamp = new Date(data.created_at).toLocaleString('es-MX', { 
+         timeZone: 'America/Mexico_City',
+         dateStyle: 'long',
+         timeStyle: 'medium'
+     });
+     
+     const modificationTimestamp = new Date(data.updated_at).toLocaleString('es-MX', { 
+         timeZone: 'America/Mexico_City',
+         dateStyle: 'long',
+         timeStyle: 'medium'
+     });
 
     for (const party of data.parties) {
         let title = '';
@@ -351,12 +357,12 @@ const sendTicketEmailNotification = async (ticketId, companyId, db, updateType, 
                     <p>Hola <strong>${party.name}</strong>,</p>
                     <p style="line-height: 1.5;">${body}</p>
                     
-                    <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #6366f1; margin: 20px 0;">
-                        <p style="margin: 0; font-size: 0.9rem; color: #4b5563;">
-                            <strong>Estampado de tiempo oficial:</strong><br>
-                            ${timestamp}
-                        </p>
-                    </div>
+                     <div style="background: #f9fafb; padding: 15px; border-left: 4px solid #6366f1; margin: 20px 0;">
+                         <p style="margin: 0; font-size: 0.9rem; color: #4b5563;">
+                             <strong>Fecha de Creación:</strong> ${creationTimestamp}<br>
+                             <strong>Última Modificación:</strong> ${modificationTimestamp}
+                         </p>
+                     </div>
 
                     <p style="font-size: 0.85rem; color: #9ca3af; margin-top: 30px; border-top: 1px solid #f3f4f6; padding-top: 15px;">
                         Este es un correo automático generado por el sistema de trazabilidad de ReporTicket. 
