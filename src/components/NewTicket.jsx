@@ -9,6 +9,8 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
   });
   const [attachments, setAttachments] = React.useState([]);
   const fileInputRef = React.useRef(null);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [ticketSuccess, setTicketSuccess] = React.useState(false);
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
@@ -18,7 +20,7 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
       const ext = file.name.split('.').pop().toLowerCase();
       return allowedExtensions.includes(ext);
     });
-
+    
     setAttachments(prev => [...prev, ...validFiles.map(f => ({
       name: f.name,
       size: (f.size / 1024).toFixed(1) + ' KB',
@@ -32,6 +34,8 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
   };
 
   const handleSubmit = () => {
+    if (submitting) return;
+    setSubmitting(true);
     // Generate a simple ticket ID (in a real app, this would come from the backend or be a UUID)
     const ticketId = 'TICK-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
     
@@ -44,6 +48,19 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
       department: formData.department
       // Note: attachments are not sent here as the backend doesn't handle them yet
       // In a full implementation, you'd upload attachments separately and associate them with the ticket
+    }).then(() => {
+      setTicketSuccess(true);
+      setSubmitting(false);
+      // Reset form after success
+      setFormData({
+        subject: '',
+        department: 'support',
+        description: '',
+        priority: 'medium'
+      });
+      setAttachments([]);
+    }).catch(() => {
+      setSubmitting(false);
     });
   };
 
@@ -183,28 +200,52 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
-          <button 
-            onClick={onCancel} 
-            className="card-hover"
-            style={{ 
-              background: 'var(--bg-hover)', 
-              border: '1px solid var(--border-color)', 
-              color: 'var(--text-muted)', 
-              cursor: 'pointer', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.5rem',
-              padding: '0.6rem 1.25rem',
-              borderRadius: '0.85rem',
-              fontSize: '0.85rem',
-              fontWeight: '600'
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-            {t('goBack')}
-          </button>
-          <button onClick={handleSubmit} className="btn-primary">{t('initializeTicket')}</button>
-        </div>
+           <button 
+             onClick={onCancel} 
+             className="card-hover"
+             style={{ 
+               background: 'var(--bg-hover)', 
+               border: '1px solid var(--border-color)', 
+               color: 'var(--text-muted)', 
+               cursor: 'pointer', 
+               display: 'flex', 
+               alignItems: 'center', 
+               gap: '0.5rem',
+               padding: '0.6rem 1.25rem',
+               borderRadius: '0.85rem',
+               fontSize: '0.85rem',
+               fontWeight: '600'
+             }}
+           >
+             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+             {t('goBack')}
+           </button>
+           <button 
+             onClick={handleSubmit} 
+             className="btn-primary"
+             disabled={submitting}
+             style={{ 
+               opacity: submitting ? 0.7 : 1,
+               cursor: submitting ? 'not-allowed' : 'pointer'
+             }}
+           >
+             {submitting ? 'Guardando...' : t('initializeTicket')}
+           </button>
+         </div>
+
+         {ticketSuccess && (
+           <div style={{ 
+             marginTop: '1.5rem', 
+             padding: '1rem', 
+             background: 'rgba(34, 197, 94, 0.1)', 
+             color: '#22c55e', 
+             borderRadius: '0.5rem', 
+             textAlign: 'center',
+             fontSize: '0.9rem'
+           }}>
+             {t('changesSaved')}
+           </div>
+         )}
       </div>
     </div>
   );
