@@ -127,15 +127,15 @@ function App() {
     }
   };
 
-  const handleRegister = async (userData) => {
-    setAuthError(null);
-    try {
-      // 1. Create company and its database
-      const regResult = await dbService.registerCompany(userData.companyName, {
-        name: userData.name,
-        email: userData.email,
-        password: userData.password
-      });
+    const handleRegister = async (userData) => {
+      setAuthError(null);
+      try {
+        // 1. Create company and its database (using user's name as company name since company field removed)
+        const regResult = await dbService.registerCompany(userData.name, {
+          name: userData.name,
+          email: userData.email,
+          password: userData.password
+        });
 
       // 2. Refresh local context and notify
       setSuccessMsg(t('registrationSuccess'));
