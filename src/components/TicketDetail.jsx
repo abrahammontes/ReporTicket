@@ -160,7 +160,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
        if (result.success) {
          setLocalTicket(prev => ({
            ...prev,
-           notes: [...(prev.notes || []), noteData]
+           notes: [...notes, noteData]
          }));
          setNewNote('');
          setAttachments([]);

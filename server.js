@@ -1255,6 +1255,7 @@ app.delete('/api/users/:id', async (req, res) => {
 
 // Ticket Operations
 app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
+  console.log('[PATCH TICKET] Request body:', req.body);
   const { status, priority, department, notes } = req.body;
   try {
     const updates = [];
@@ -1263,23 +1264,29 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
     if (priority) { updates.push('priority = ?'); params.push(priority); }
     if (department) { updates.push('department = ?'); params.push(department); }
     
+    // Handle notes update
+    if (notes !== undefined && notes !== null) {
+      updates.push('notes = ?');
+      params.push(notes);
+    }
+    
     if (updates.length > 0) {
       params.push(req.params.id);
       const query = process.env.DB_MODE === 'single'
         ? `UPDATE tickets SET ${updates.join(', ')} WHERE id = ? AND company_id = ?`
         : `UPDATE tickets SET ${updates.join(', ')} WHERE id = ?`;
       if (process.env.DB_MODE === 'single') params.push(req.companyId);
-
+      
       await req.db.execute(query, params);
     }
-
+    
     // Notification for updates (status/priority/dept)
     if (status || priority || department) {
         await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'status_change', { newStatus: status }).catch(err => console.log('[NOTIF ERR] PATCH Update:', err.message));
     }
-
-    // Handlle notes if provided (assuming for simplicity we just store them in a notes table)
-    if (notes && notes.length > 0) {
+    
+    // Handle notes for notifications and traceability
+    if (Array.isArray(notes) && notes.length > 0) {
       const latestNote = notes[notes.length - 1];
       
       // 1. Traceability Table
@@ -1292,21 +1299,13 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
           : [req.params.id, latestNote.text, latestNote.type === 'internal' ? 1 : 0]
       );
       
-       // 2. Legacy Sync (for UI visibility)
-       // Trust the notes array sent by the frontend as the complete and correct set of notes
-       if (Array.isArray(notes)) {
-         await req.db.execute(
-           'UPDATE tickets SET notes = ?, updated_at = NOW() WHERE id = ?',
-           [JSON.stringify(notes), req.params.id]
-         );
-       }
-      
       // 3. Notification
       await sendTicketEmailNotification(req.params.id, req.companyId, req.db, 'new_note', { isInternal: latestNote.type === 'internal' }).catch(err => console.log('[NOTIF ERR] PATCH Note:', err.message));
     }
-
+    
     res.json({ success: true, message: 'Ticket updated' });
   } catch (error) {
+    console.error('[PATCH TICKET] Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

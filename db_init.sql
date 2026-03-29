@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     INDEX (company_id, status)
 );
 
+-- Ensure notes column exists for tickets table (for UI compatibility)
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS notes TEXT;
+
 CREATE TABLE IF NOT EXISTS ticket_notes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     company_id VARCHAR(50) NOT NULL,
