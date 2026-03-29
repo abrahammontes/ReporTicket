@@ -255,7 +255,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
     }
   };
 
-  const handlePurgeSystem = async () => {
+   const handlePurgeSystem = async () => {
     const confirm1 = window.confirm(t('confirmPurge1') || '¡ADVERTENCIA! Esta acción ELIMINARÁ TODOS los tickets y notas del sistema. ¿Estás seguro?');
     if (!confirm1) return;
     
@@ -268,10 +268,10 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
         alert(t('purgeSuccess') || 'Sistema limpiado correctamente.');
         window.location.reload();
       } else {
-        alert('Error: ' + result.message);
+        alert(t('error') || 'Error: ' + result.message);
       }
     } catch (err) {
-      alert('Error purging system');
+      alert(t('error') || 'Error purging system');
     }
   };
 
@@ -614,7 +614,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
             <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '2px dashed var(--border-color)' }}>
               <h3 style={{ color: '#ef4444', fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                {t('dangerZone') || 'Zona de Peligro'}
+                 {t('dangerZone')}
               </h3>
               <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '1.5rem', borderRadius: '0.75rem' }}>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
