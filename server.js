@@ -170,31 +170,7 @@ app.get('/api/health-check', async (req, res) => {
 const companyPools = new Map();
 
 const getCompanyPool = async (companyId) => {
-  if (process.env.DB_MODE === 'single') {
-    return masterPool;
-  }
-
-  if (companyPools.has(companyId)) {
-    return companyPools.get(companyId);
-  }
-
-  const [companies] = await masterPool.query('SELECT db_name FROM companies WHERE id = ?', [companyId]);
-  if (companies.length === 0) return null;
-
-  const dbName = companies[0].db_name;
-  const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASS || '',
-    database: dbName,
-    waitForConnections: true,
-    connectionLimit: 5,
-    queueLimit: 0
-  });
-
-  companyPools.set(companyId, pool);
-  return pool;
+  return masterPool;
 };
 
 // Middleware to resolve company pool
@@ -761,21 +737,9 @@ app.post('/api/register-company', async (req, res) => {
         [companyId, companyName, dbName]
       );
 
-      // 2. Create the physical database (Only in multi mode)
-      if (process.env.DB_MODE !== 'single') {
-        await masterPool.query(`CREATE DATABASE \`${dbName}\``);
-      }
-
-      // 3. Initialize tables and create admin
-      const isSingle = process.env.DB_MODE === 'single';
-      const targetPool = isSingle ? masterPool : mysql.createPool({
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT) || 3306,
-        user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASS || '',
-        database: dbName,
-        multipleStatements: true
-      });
+      // 2. Initialise tables and create admin
+      const isSingle = true; // Forced to single database for now
+      const targetPool = masterPool;
 
       try {
         const initSql = isSingle ? "" : `
@@ -845,7 +809,7 @@ app.post('/api/register-company', async (req, res) => {
 
         if (!isSingle) await targetPool.end();
 
-        res.json({ success: true, companyId, dbName, message: 'Company and database created successfully.' });
+        res.json({ success: true, companyId, dbName, message: 'Company record created successfully.' });
       } catch (innerError) {
         if (!isSingle) await targetPool.end();
         throw innerError;
