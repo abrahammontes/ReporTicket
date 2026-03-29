@@ -131,50 +131,40 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
      }
    };
 
-   const handleAddNote = async () => {
-     if (!newNote.trim()) return;
-     setIsSaving(true);
-     setSaveMessage(t('savingTicket')); // "guardando ticket"
-     let notes = localTicket.notes || [];
-     if (typeof notes === 'string') {
-       try {
-         notes = JSON.parse(notes);
-       } catch (e) {
-         notes = [];
-       }
-     }
-     if (!Array.isArray(notes)) notes = [];
-
-     const noteData = {
-       id: Date.now(),
-       text: newNote,
-       type: isInternal ? 'internal' : 'public',
-       date: new Date().toLocaleString(),
-       attachments: attachments
-     };
-     
-     try {
-       const result = await dbService.updateTicket(localTicket.id, {
-         notes: [...notes, noteData]
-       });
-       if (result.success) {
-         setLocalTicket(prev => ({
-           ...prev,
-           notes: [...notes, noteData]
-         }));
-         setNewNote('');
-         setAttachments([]);
-         setShowSuccess(true);
-         setTimeout(() => setShowSuccess(false), 3000);
-         if (onUpdate) onUpdate();
-       }
-     } catch (err) {
-       console.error('Error adding note:', err);
-     } finally {
-       setIsSaving(false);
-       setSaveMessage('');
-     }
-   };
+    const handleAddNote = async () => {
+      if (!newNote.trim()) return;
+      setIsSaving(true);
+      setSaveMessage(t('savingTicket')); // "guardando ticket"
+      const noteData = {
+        id: Date.now(),
+        text: newNote,
+        type: isInternal ? 'internal' : 'public',
+        date: new Date().toLocaleString(),
+        attachments: attachments
+      };
+      
+      try {
+        const result = await dbService.updateTicket(localTicket.id, {
+          notes: [...(localTicket.notes || []), noteData]
+        });
+        if (result.success) {
+          setLocalTicket(prev => ({
+            ...prev,
+            notes: [...(prev.notes || []), noteData]
+          }));
+          setNewNote('');
+          setAttachments([]);
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 3000);
+          if (onUpdate) onUpdate();
+        }
+      } catch (err) {
+        console.error('Error adding note:', err);
+      } finally {
+        setIsSaving(false);
+        setSaveMessage('');
+      }
+    };
 
   const handleNoteChange = (e) => {
     const value = e.target.value;

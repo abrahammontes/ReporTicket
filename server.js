@@ -1267,7 +1267,7 @@ app.patch('/api/tickets/:id', withCompanyPool, async (req, res) => {
     // Handle notes update
     if (notes !== undefined && notes !== null) {
       updates.push('notes = ?');
-      params.push(notes);
+      params.push(JSON.stringify(notes));
     }
     
     if (updates.length > 0) {
