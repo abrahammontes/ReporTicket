@@ -829,13 +829,13 @@ app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const [users] = await masterPool.query(
-      'SELECT g.user_id, g.company_id, g.role, g.password, c.name as company_name ' +
-      'FROM global_directory g ' +
-      'LEFT JOIN companies c ON g.company_id = c.id ' +
-      'WHERE g.email = ?',
-      [email]
-    );
+     const [users] = await masterPool.query(
+       'SELECT g.user_id, g.company_id, g.name, g.email, g.phone, g.extension, g.photo, g.role, g.password, c.name as company_name ' +
+       'FROM global_directory g ' +
+       'LEFT JOIN companies c ON g.company_id = c.id ' +
+       'WHERE g.email = ?',
+       [email]
+     );
 
     if (users.length === 0) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
