@@ -281,6 +281,8 @@ export const translations = {
     profile: "Perfil",
      saveChanges: "Guardar Cambios",
      savingTicket: "Guardando ticket...",
+     savingSettings: "Guardando cambios en el ticket...",
+     savingNote: "Guardando respuesta...",
     settings: "Configuración",
     personalInfo: "Información Personal",
     nameUpdated: "Nombre actualizado con éxito",

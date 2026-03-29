@@ -111,30 +111,30 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
     }).catch(console.error);
   };
 
-   const handleSaveSettings = async () => {
-     setIsSaving(true);
-     setSaveMessage(t('savingTicket')); // "guardando ticket"
-     try {
-       const result = await dbService.updateTicket(localTicket.id, pendingUpdates);
-       if (result.success) {
-         setLocalTicket(prev => ({ ...prev, ...pendingUpdates }));
-         setPendingUpdates({});
-         setShowSuccess(true);
-         setTimeout(() => setShowSuccess(false), 3000);
-         if (onUpdate) onUpdate();
-       }
-     } catch (err) {
-       console.error('Error saving settings:', err);
-     } finally {
-       setIsSaving(false);
-       setSaveMessage('');
-     }
-   };
+    const handleSaveSettings = async () => {
+      setIsSaving(true);
+      setSaveMessage(t('savingSettings')); // "Guardando cambios en el ticket..."
+      try {
+        const result = await dbService.updateTicket(localTicket.id, pendingUpdates);
+        if (result.success) {
+          setLocalTicket(prev => ({ ...prev, ...pendingUpdates }));
+          setPendingUpdates({});
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 3000);
+          if (onUpdate) onUpdate();
+        }
+      } catch (err) {
+        console.error('Error saving settings:', err);
+      } finally {
+        setIsSaving(false);
+        setSaveMessage('');
+      }
+    };
 
     const handleAddNote = async () => {
       if (!newNote.trim()) return;
       setIsSaving(true);
-      setSaveMessage(t('savingTicket')); // "guardando ticket"
+      setSaveMessage(t('savingNote')); // "Guardando respuesta..."
       const noteData = {
         id: Date.now(),
         text: newNote,
