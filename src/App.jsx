@@ -131,11 +131,7 @@ function App() {
     setAuthError(null);
     try {
       // 1. Create company and its database
-      const regResult = await dbService.registerCompany(userData.companyName, {
-        name: userData.name,
-        email: userData.email,
-        password: userData.password
-      });
+      const regResult = await dbService.registerCompany(userData.companyName, userData);
 
       // 2. Refresh local context and notify
       setSuccessMsg(t('registrationSuccess'));
