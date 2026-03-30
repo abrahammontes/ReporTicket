@@ -73,11 +73,15 @@ function App() {
 
   const t = (key) => (translations[language] && translations[language][key]) || key;
 
-  const handleViewChange = (newView) => {
-    setAuthError(null);
-    setSuccessMsg(null);
-    setView(newView);
-  };
+   const handleViewChange = (newView) => {
+     setAuthError(null);
+     // Only clear successMsg if we're NOT navigating to login from register
+     // (to preserve registration success message)
+     if (!(view === 'register' && newView === 'login')) {
+       setSuccessMsg(null);
+     }
+     setView(newView);
+   };
 
   const [stats, setStats] = useState({
     open: 0,
