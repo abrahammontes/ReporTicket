@@ -14,35 +14,49 @@ const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage
   const [localError, setLocalError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleRegister = async () => {
-    setLocalError(null);
-    if (honeypot) return;
-    if (!isRobotChecked) {
-      setLocalError(t('captchaRequired'));
-      return;
-    }
-    
-    const isValidPassword = password.length >= 8;
-    if (!isValidPassword) {
-      setLocalError(t('passwordRequirementsError') || 'La contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      await onRegister({ 
-        name, 
-        email, 
-        password, 
-        phone: `${countryPrefix} ${phone}`, 
-        extension
-      });
-    } catch (err) {
-      setLocalError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+   const handleRegister = async () => {
+     setLocalError(null);
+     if (honeypot) return;
+     if (!isRobotChecked) {
+       setLocalError(t('captchaRequired'));
+       return;
+     }
+     
+     const isValidPassword = password.length >= 8;
+     if (!isValidPassword) {
+       setLocalError(t('passwordRequirementsError') || 'La contraseña debe tener al menos 8 caracteres.');
+       return;
+     }
+ 
+     setIsLoading(true);
+     try {
+       // Create a timeout promise (10 seconds)
+       const timeoutPromise = new Promise((_, reject) =>
+         setTimeout(() => reject(new Error('Request timeout')), 10000)
+       );
+       
+       // Race between the actual request and timeout
+       await Promise.race([
+         onRegister({ 
+           name, 
+           email, 
+           password, 
+           phone: `${countryPrefix} ${phone}`, 
+           extension
+         }),
+         timeoutPromise
+       ]);
+     } catch (err) {
+       // Handle timeout specifically
+       if (err.message === 'Request timeout') {
+         setLocalError(t('registrationTimeout') || 'La solicitud ha tardado demasiado. Por favor, verifique su conexión e intente nuevamente.');
+       } else {
+         setLocalError(err.message);
+       }
+     } finally {
+       setIsLoading(false);
+     }
+   };
 
   return (
     <div className="register-page animate-in" style={{ 
