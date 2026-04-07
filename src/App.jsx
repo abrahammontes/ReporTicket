@@ -118,7 +118,7 @@ function App() {
         setView('dashboard');
       }
     } catch (err) {
-      setAuthError(err.message || t('errorInvalidCredentials'));
+      setAuthError(t(err.message) || t('errorInvalidCredentials'));
     }
   };
 
@@ -129,7 +129,7 @@ function App() {
       setSuccessMsg(t('registrationSuccessPending'));
       handleViewChange('login');
     } catch (err) {
-      setAuthError(err.message);
+      setAuthError(t(err.message) || err.message);
     }
   };
 

@@ -580,7 +580,10 @@ app.post('/api/register', async (req, res) => {
             status: 'pending'
         }]);
         
-        if (error) throw error;
+        if (error) {
+            if (error.code === '23505') return res.status(400).json({ success: false, message: 'emailAlreadyExists' });
+            throw error;
+        }
 
         // Try to notify the user via SMTP if configured
         sendSystemEmail(
@@ -590,7 +593,7 @@ app.post('/api/register', async (req, res) => {
             `<h2>Hola ${name}</h2><p>Tu registro en <b>ReporTicket</b> ha sido exitoso.</p><p>Actualmente tu cuenta está en estado <b>'Pendiente'</b> y deberá ser activada por un administrador para que puedas crear tickets. Recibirás un correo cuando tu cuenta esté lista.</p>`
         );
 
-        res.json({ success: true, message: 'Registration successful. Waiting for admin activation.' });
+        res.json({ success: true, message: 'registrationSuccessPending' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -641,7 +644,7 @@ app.post('/api/send-test-email', async (req, res) => {
     const destination = testEmail || testRecipient || smtpUser;
     
     if (!smtpHost || !smtpUser || !smtpPass) {
-        return res.status(400).json({ success: false, message: 'Faltan datos de configuración SMTP' });
+        return res.status(400).json({ success: false, message: 'smtpConfigMissing' });
     }
 
     try {
@@ -674,7 +677,7 @@ app.post('/api/send-test-email', async (req, res) => {
             html: "<b>✅ Tu configuración SMTP funciona correctamente.</b>"
         });
 
-        res.json({ success: true, message: 'Correo de prueba enviado con éxito' });
+        res.json({ success: true, message: 'testEmailSuccess' });
     } catch (e) {
         console.error('SMTP test failed:', e);
         res.status(500).json({ success: false, message: 'Error SMTP: ' + e.message });
@@ -684,7 +687,7 @@ app.post('/api/send-test-email', async (req, res) => {
 app.post('/api/test-supabase', async (req, res) => {
     const { supabaseUrl, supabaseKey } = req.body;
     if (!supabaseUrl || !supabaseKey) {
-        return res.status(400).json({ success: false, message: 'URL and Key are required' });
+        return res.status(400).json({ success: false, message: 'urlAndKeyRequired' });
     }
 
     console.log('Testing Supabase connection to:', supabaseUrl);
@@ -704,12 +707,12 @@ app.post('/api/test-supabase', async (req, res) => {
         currentSettings.supabaseConfig.supabaseStatus = 'connected';
         saveSettings(currentSettings);
 
-        res.json({ success: true, message: 'Connection to Supabase established successfully' });
+        res.json({ success: true, message: 'connectionSuccess' });
     } catch (e) {
         console.error('Supabase connection test FAILED:', e.message);
         currentSettings.supabaseConfig.supabaseStatus = 'disconnected';
         saveSettings(currentSettings);
-        res.status(400).json({ success: false, message: 'Connection failed: ' + e.message });
+        res.status(400).json({ success: false, message: 'connectionFailed' });
     }
 });
 
@@ -717,12 +720,12 @@ app.post('/api/test-supabase', async (req, res) => {
 
 app.post('/api/upload', upload.single('file'), async (req, res) => {
     if (!req.file) {
-        return res.status(400).json({ success: false, message: 'No file uploaded' });
+        return res.status(400).json({ success: false, message: 'noFileUploaded' });
     }
 
     const { supabaseUrl, supabaseKey } = currentSettings.supabaseConfig;
     if (!supabaseUrl || !supabaseKey) {
-        return res.status(400).json({ success: false, message: 'Supabase not configured' });
+        return res.status(400).json({ success: false, message: 'supabaseNotConfigured' });
     }
 
     try {

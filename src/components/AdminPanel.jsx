@@ -35,6 +35,9 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
   });
   const [testConnectionStatus, setTestConnectionStatus] = useState(null);
   const [dbTestStatus, setDbTestStatus] = useState(null);
+  const [testErrorMsg, setTestErrorMsg] = useState(null);
+  const [dbErrorMsg, setDbErrorMsg] = useState(null);
+  const [allTickets, setAllTickets] = useState([]);
   const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [showSupabaseKey, setShowSupabaseKey] = useState(false);
   const [testEmail, setTestEmail] = useState('');
@@ -117,16 +120,17 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
 
       if (data.success) {
         setTestConnectionStatus('success');
+        setTestErrorMsg(null);
         setTimeout(() => setTestConnectionStatus(null), 4000);
       } else {
         setTestConnectionStatus('error');
-        console.error('SMTP Test Error:', data.message);
-        setTimeout(() => setTestConnectionStatus(null), 5000);
+        setTestErrorMsg(data.message);
+        setTimeout(() => setTestConnectionStatus(null), 10000);
       }
     } catch (error) {
       setTestConnectionStatus('error');
-      console.error('Fetch Error:', error);
-      setTimeout(() => setTestConnectionStatus(null), 5000);
+      setTestErrorMsg('systemError');
+      setTimeout(() => setTestConnectionStatus(null), 10000);
     }
   };
 
@@ -141,12 +145,12 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
       };
       const result = await dbService.updateSystemSettings({ smtpConfig: smtpData });
       if (result.success) {
-        alert(t('changesSaved'));
+        alert(t('smtpConfigSaved'));
       } else {
-        alert('Error: ' + result.message);
+        alert('Error: ' + (t(result.message) || result.message));
       }
     } catch (err) {
-      alert('Error saving SMTP settings');
+      alert(t('errorSavingSmtp'));
     }
   };
 
@@ -157,16 +161,18 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
       const result = await dbService.testSupabaseConnection(settingsForm.supabaseUrl, settingsForm.supabaseKey);
       if (result.success) {
         setDbTestStatus('success');
+        setDbErrorMsg(null);
         setSettingsForm(prev => ({ ...prev, supabaseStatus: 'connected' }));
         setTimeout(() => setDbTestStatus(null), 4000);
       } else {
         setDbTestStatus('error');
-        setSettingsForm(prev => ({ ...prev, supabaseStatus: 'disconnected' }));
-        setTimeout(() => setDbTestStatus(null), 5000);
+        setDbErrorMsg(result.message);
+        setTimeout(() => setDbTestStatus(null), 10000);
       }
-    } catch (err) {
+    } catch (error) {
       setDbTestStatus('error');
-      setTimeout(() => setDbTestStatus(null), 5000);
+      setDbErrorMsg('systemError');
+      setTimeout(() => setDbTestStatus(null), 10000);
     }
   };
 
@@ -174,12 +180,12 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
     try {
       const result = await dbService.updateSystemSettings({ supabaseConfig: settingsForm });
       if (result.success) {
-        alert(t('changesSaved'));
+        alert(t('databaseConfigSaved'));
       } else {
-        alert('Error: ' + result.message);
+        alert('Error: ' + (t(result.message) || result.message));
       }
     } catch (err) {
-      alert('Error saving Supabase settings');
+      alert(t('errorSavingSupabase'));
     }
   };
 
@@ -232,17 +238,19 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
       name: u.name, 
       role: u.role, 
       status: u.status || 'pending', 
-      companyId: u.companyId || '' 
+      companyId: u.companyId || '',
+      extension: u.extension || '' 
     });
   };
 
   const handleEditUserSave = async (userId) => {
     if (editUserForm.name.trim()) {
       await dbService.updateUserProfile(userId, { 
-        name: editUserForm.name.trim(), 
+        name: editUserForm.name,
         role: editUserForm.role,
         status: editUserForm.status,
-        companyId: editUserForm.companyId
+        company_id: editUserForm.companyId || null,
+        extension: editUserForm.extension || null
       });
       const data = await dbService.getUsers();
       setUsers(data);
@@ -286,13 +294,12 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
     try {
       const result = await dbService.purgeTickets();
       if (result.success) {
-        alert(t('purgeSuccess') || 'Sistema limpiado correctamente.');
-        window.location.reload();
+        alert(t('purgeSuccess'));
       } else {
-        alert(t('error') || 'Error: ' + result.message);
+        alert(t('error') + ': ' + (t(result.message) || result.message));
       }
-    } catch (_) {
-      alert(t('error') || 'Error purging system');
+    } catch (error) {
+      alert(t('errorPurging'));
     }
   };
 
@@ -443,21 +450,28 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                   </div>
                 )}
                 {testConnectionStatus === 'error' && (
-                  <div className="connection-status-msg error">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                    {t('connectionFailed')}
+                  <div className="connection-status-msg error" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                      {t('connectionFailed')}
+                    </div>
+                    {testErrorMsg && (
+                      <span style={{ fontSize: '0.8rem', opacity: 0.9, marginLeft: '2.2rem' }}>
+                        {t(testErrorMsg) || testErrorMsg}
+                      </span>
+                    )}
                   </div>
                 )}
 
                 <div>
                   <label className="input-label">{t('smtpHost')}</label>
-                  <input type="text" value={settingsForm.smtpHost} onChange={e => setSettingsForm({...settingsForm, smtpHost: e.target.value})} placeholder="smtp.ejemplo.com" required className="modern-input" />
+                  <input type="text" value={settingsForm.smtpHost} onChange={e => setSettingsForm({...settingsForm, smtpHost: e.target.value})} placeholder={t('smtpHostPlaceholder')} required className="modern-input" />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label className="input-label">{t('smtpUser')}</label>
-                    <input type="text" value={settingsForm.smtpUser} onChange={e => setSettingsForm({...settingsForm, smtpUser: e.target.value})} placeholder="user@domain.com" required className="modern-input" />
+                    <input type="text" value={settingsForm.smtpUser} onChange={e => setSettingsForm({...settingsForm, smtpUser: e.target.value})} placeholder={t('smtpUserPlaceholder')} required className="modern-input" />
                   </div>
                   <div>
                     <label className="input-label">{t('smtpPort') || 'Puerto'}</label>
@@ -468,7 +482,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                         smtpPort: port,
                         smtpSecure: port === '465' ? true : settingsForm.smtpSecure
                       });
-                    }} placeholder="465 / 587" className="modern-input" />
+                    }} placeholder={t('smtpPortPlaceholder')} className="modern-input" />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <label className="input-label">SSL/TLS</label>
@@ -503,7 +517,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
 
                 <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: 'auto' }}>
                   <label className="input-label" style={{ color: 'var(--text-main)', fontWeight: '700' }}>{t('testEmailDestination')}</label>
-                  <input type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="email@test.com" className="modern-input" style={{ marginBottom: '1rem' }} />
+                  <input type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder={t('testEmailPlaceholder')} className="modern-input" style={{ marginBottom: '1rem' }} />
                   <div style={{ display: 'flex', gap: '0.75rem' }}>
                     <button type="button" className="btn-secondary" onClick={handleTestSmtp} style={{ flex: 1 }} disabled={testConnectionStatus === 'testing' || !testEmail}>
                       {testConnectionStatus === 'testing' ? <svg className="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> : t('testConnection')}
@@ -559,9 +573,16 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                   </div>
                 )}
                 {dbTestStatus === 'error' && (
-                  <div className="connection-status-msg error">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                    {t('connectionFailed')}
+                  <div className="connection-status-msg error" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                      {t('connectionFailed')}
+                    </div>
+                    {dbErrorMsg && (
+                      <span style={{ fontSize: '0.8rem', opacity: 0.9, marginLeft: '2.2rem' }}>
+                        {t(dbErrorMsg) || dbErrorMsg}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -571,7 +592,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                     type="url" 
                     value={settingsForm.supabaseUrl} 
                     onChange={e => setSettingsForm({...settingsForm, supabaseUrl: e.target.value})} 
-                    placeholder="https://your-project.supabase.co" 
+                    placeholder={t('databaseUrlPlaceholder')} 
                     required 
                     className="modern-input" 
                   />
@@ -800,6 +821,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                   <tr style={{ textAlign: 'left', background: 'var(--bg-hover)' }}>
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('user')}</th>
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('emailAddress')}</th>
+                    <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('extension')}</th>
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('role')}</th>
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('status')}</th>
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('company')}</th>
@@ -815,6 +837,9 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                             <input type="text" className="modern-input" value={editUserForm.name} onChange={e => setEditUserForm(f => ({...f, name: e.target.value}))} style={{ padding: '0.5rem' }} />
                           </td>
                           <td style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)' }}>{u.email}</td>
+                          <td style={{ padding: '1rem 1.5rem' }}>
+                            <input type="text" className="modern-input" value={editUserForm.extension} onChange={e => setEditUserForm(f => ({...f, extension: e.target.value}))} style={{ padding: '0.5rem', width: '80px' }} placeholder="Ext." />
+                          </td>
                           <td style={{ padding: '1rem 1.5rem' }}>
                             <select className="modern-input" value={editUserForm.role} onChange={e => setEditUserForm(f => ({...f, role: e.target.value}))} style={{ padding: '0.5rem' }}>
                               <option value="customer">{t('roles.customer')}</option>
@@ -849,6 +874,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                             </div>
                           </td>
                           <td style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{u.email}</td>
+                          <td style={{ padding: '1.25rem 1.5rem', color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: '600' }}>{u.extension || '-'}</td>
                           <td style={{ padding: '1.25rem 1.5rem' }}>
                               <span className={`badge badge-${u.role === 'superadmin' ? 'closed' : (u.role === 'admin' ? 'old' : (u.role === 'supervisor' ? 'inprogress' : 'open'))}`} style={{ fontSize: '0.7rem', padding: '0.25rem 0.75rem', borderRadius: '2rem', fontWeight: '700', textTransform: 'uppercase' }}>
                                 {t(`roles.${u.role}`)}
