@@ -7,7 +7,7 @@ const Dashboard = ({ stats, t, tickets = [], onSelectTicket }) => {
     if (activeFilter === 'all') return true;
     if (activeFilter === 'open') return ticket.status !== 'closed';
     if (activeFilter === 'overdue') return ticket.status === 'old';
-    if (activeFilter === 'unassigned') return !ticket.agent;
+    if (activeFilter === 'unassigned') return !ticket.agentId;
     if (activeFilter === 'closed') return ticket.status === 'closed';
     return true;
   });

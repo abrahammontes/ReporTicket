@@ -60,7 +60,6 @@ export const dbService = {
   },
 
   registerUser: async (userData) => {
-    const session = JSON.parse(localStorage.getItem('reporticket_session') || '{}');
     const response = await fetch(`${API_URL}/users`, {
       method: 'POST',
       headers: getHeaders(),
@@ -84,11 +83,11 @@ export const dbService = {
     return data.companies || [];
   },
 
-  registerCompany: async (name, adminUser) => {
+  registerCompany: async (name, dbName, adminUser) => {
     const response = await fetch(`${API_URL}/register-company`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, adminUser })
+      body: JSON.stringify({ name, dbName, adminUser })
     });
     const data = await response.json();
     if (!data.success) throw new Error(data.message);
@@ -104,25 +103,26 @@ export const dbService = {
     return data.tickets || [];
   },
 
-  addTicket: async (ticket, userName) => {
-    const session = JSON.parse(localStorage.getItem('reporticket_session') || '{}');
-    const companyPrefix = (session.companyName || 'TKT').replace(/[^a-zA-Z0-9]/g, '').substring(0, 13);
-    const randomDigits = Math.floor(100000 + Math.random() * 900000);
-    const customId = `${companyPrefix}-${randomDigits}`;
+   addTicket: async (ticket, userName) => {
+     const session = JSON.parse(localStorage.getItem('reporticket_session') || '{}');
+     const companyPrefix = (session.companyName || 'TKT').replace(/[^a-zA-Z0-9]/g, '').substring(0, 13);
+     const randomDigits = Math.floor(100000 + Math.random() * 900000);
+     const customId = `${companyPrefix}-${randomDigits}`;
 
-    const response = await fetch(`${API_URL}/tickets`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({
-        ...ticket,
-        id: customId,
-        user_name: userName
-      })
-    });
-    const data = await response.json();
-    if (!data.success) throw new Error(data.message);
-    return data;
-  },
+     const response = await fetch(`${API_URL}/tickets`, {
+       method: 'POST',
+       headers: getHeaders(),
+       body: JSON.stringify({
+         ...ticket,
+         id: customId,
+         userId: session.id || '', // Standardized to camelCase
+         userName: userName
+       })
+     });
+     const data = await response.json();
+     if (!data.success) throw new Error(data.message);
+     return data;
+   },
 
   updateTicket: async (id, updates) => {
     const response = await fetch(`${API_URL}/tickets/${id}`, {
@@ -189,6 +189,15 @@ export const dbService = {
     return await response.json();
   },
 
+  updateCompanyStatus: async (companyId, status) => {
+    const response = await fetch(`${API_URL}/companies/${companyId}/status`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ status })
+    });
+    return await response.json();
+  },
+
   // System Settings
   getSystemSettings: async () => {
     const response = await fetch(`${API_URL}/settings`, {
@@ -196,6 +205,15 @@ export const dbService = {
     });
     const data = await response.json();
     return data.settings || {};
+  },
+
+  testSupabaseConnection: async (url, key) => {
+    const response = await fetch(`${API_URL}/test-supabase`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ supabaseUrl: url, supabaseKey: key })
+    });
+    return await response.json();
   },
 
   updateSystemSettings: async (settings) => {
@@ -222,31 +240,26 @@ export const dbService = {
     });
     return await response.json();
   },
+
+  uploadFile: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Note: No 'Content-Type' header here, browser sets it with boundary for FormData
+    const response = await fetch(`${API_URL}/upload`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || `Upload failed: ${response.status}`);
+    }
+    
+    return await response.json();
+  },
   
-  checkHealth: async () => {
-    const response = await fetch(`${API_URL}/health-check`, {
-      headers: getHeaders()
-    });
-    return await response.json();
-  },
 
-  testDatabaseConnection: async (config) => {
-    const response = await fetch(`${API_URL}/settings/database/test`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config)
-    });
-    return await response.json();
-  },
-
-  updateDatabaseSettings: async (config) => {
-    const response = await fetch(`${API_URL}/settings/database/save`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config)
-    });
-    return await response.json();
-  },
 
   getSession: () => {
     const session = localStorage.getItem('reporticket_session');

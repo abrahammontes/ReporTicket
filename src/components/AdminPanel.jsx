@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/db';
 
-const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tickets' }) => {
+const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterArea, setFilterArea] = useState('all');
@@ -9,12 +9,13 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyDbName, setNewCompanyDbName] = useState('');
   const [newAdminName, setNewAdminName] = useState('');
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [showNewAdminPass, setShowNewAdminPass] = useState(false);
   const [companySuccessMessage, setCompanySuccessMessage] = useState('');
-  const [systemInfo, setSystemInfo] = useState({ dbMode: 'single', dbHost: 'localhost', dbPrefix: '', version: '1.2.0' });
+  const [systemInfo, setSystemInfo] = useState({ dbHost: 'localhost', version: '1.2.0' });
 
   const [editingCompanyId, setEditingCompanyId] = useState(null);
   const [editCompanyName, setEditCompanyName] = useState('');
@@ -28,47 +29,36 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
     smtpPort: '465',
     smtpUser: '',
     smtpPass: '',
-    smtpSecure: true
+    smtpSecure: true,
+    supabaseUrl: '',
+    supabaseKey: '',
+    supabaseStatus: 'unknown'
   });
   const [testConnectionStatus, setTestConnectionStatus] = useState(null);
+  const [dbTestStatus, setDbTestStatus] = useState(null);
   const [showSmtpPass, setShowSmtpPass] = useState(false);
+  const [showSupabaseKey, setShowSupabaseKey] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   
-  const [dbConfigForm, setDbConfigForm] = useState({
-    host: '',
-    port: '3306',
-    user: '',
-    password: '',
-    database: '',
-    mode: 'single'
-  });
-  const [dbTestStatus, setDbTestStatus] = useState(null);
-  const [showDbPass, setShowDbPass] = useState(false);
+
 
   useEffect(() => {
     if (user?.role === 'superadmin') {
-      dbService.getUsers().then(data => {
-        // Map company_id to companyId for frontend consistency
-        setUsers(data.map(u => ({ ...u, companyId: u.company_id })));
-      });
+      dbService.getUsers().then(setUsers);
       dbService.getCompanies().then(setCompanies);
       dbService.getSystemInfo().then(info => {
         setSystemInfo(info);
-        setDbConfigForm(prev => ({
-          ...prev,
-          host: info.dbHost || 'localhost',
-          port: info.dbPort || '3306',
-          mode: info.dbMode || 'single',
-          database: info.dbName || 'reporticket_master',
-          user: info.dbUser || 'root'
-        }));
+
       });
-      // Load SMTP Settings
+      // Load System Settings (SMTP & Supabase)
       dbService.getSystemSettings().then(settings => {
-        if (settings.smtpConfig) {
-          setSettingsForm(settings.smtpConfig);
-        }
+        setSettingsForm({
+          ...settingsForm,
+          ...(settings.smtpConfig || {}),
+          ...(settings.supabaseConfig || {})
+        });
       });
+
     }
   }, [user]);
 
@@ -79,7 +69,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
       return;
     }
     try {
-      await dbService.registerCompany(newCompanyName.trim(), {
+      await dbService.registerCompany(newCompanyName.trim(), newCompanyDbName.trim(), {
         name: newAdminName.trim(),
         email: newAdminEmail.trim(),
         password: newAdminPassword.trim()
@@ -88,6 +78,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
       setCompanies(updated);
       await fetchUsers();
       setNewCompanyName('');
+      setNewCompanyDbName('');
       setNewAdminName('');
       setNewAdminEmail('');
       setNewAdminPassword('');
@@ -144,7 +135,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
 
   const handlePersistSmtp = async () => {
     try {
-      const result = await dbService.updateSystemSettings(settingsForm);
+      const result = await dbService.updateSystemSettings({ smtpConfig: settingsForm });
       if (result.success) {
         alert(t('changesSaved'));
       } else {
@@ -155,35 +146,40 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
     }
   };
 
-  const handleDBTest = async (e) => {
+  const handleTestSupabase = async (e) => {
     e.preventDefault();
     setDbTestStatus('testing');
     try {
-      const data = await dbService.testDatabaseConnection(dbConfigForm);
-      if (data.success) {
+      const result = await dbService.testSupabaseConnection(settingsForm.supabaseUrl, settingsForm.supabaseKey);
+      if (result.success) {
         setDbTestStatus('success');
+        setSettingsForm(prev => ({ ...prev, supabaseStatus: 'connected' }));
+        setTimeout(() => setDbTestStatus(null), 4000);
       } else {
         setDbTestStatus('error');
+        setSettingsForm(prev => ({ ...prev, supabaseStatus: 'disconnected' }));
+        setTimeout(() => setDbTestStatus(null), 5000);
       }
     } catch (err) {
       setDbTestStatus('error');
+      setTimeout(() => setDbTestStatus(null), 5000);
     }
-    setTimeout(() => setDbTestStatus(null), 5000);
   };
 
-  const handleDBSave = async (e) => {
-    e.preventDefault();
-    if (!window.confirm('¿Cambiar la base de datos maestra? El servidor se reiniciará.')) return;
+  const handlePersistSupabase = async () => {
     try {
-      const data = await dbService.updateDatabaseSettings(dbConfigForm);
-      if (data.success) {
+      const result = await dbService.updateSystemSettings({ supabaseConfig: settingsForm });
+      if (result.success) {
         alert(t('changesSaved'));
-        window.location.reload();
+      } else {
+        alert('Error: ' + result.message);
       }
     } catch (err) {
-      alert('Error saving DB configuration');
+      alert('Error saving Supabase settings');
     }
   };
+
+
 
   // Removed handleUpdateUserCompany as it's now part of the edit save flow
 
@@ -208,6 +204,21 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
       const updatedUsers = await dbService.getUsers();
       setCompanies(updatedCompanies);
       setUsers(updatedUsers);
+    }
+  };
+
+  const handleToggleCompanyStatus = async (companyId, currentStatus) => {
+    const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
+    try {
+      const res = await dbService.updateCompanyStatus(companyId, newStatus);
+      if (res.success) {
+        setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, status: newStatus } : c));
+      } else {
+        alert(res.message);
+      }
+    } catch (err) {
+      console.error('Error toggling company status:', err);
+      alert(t('errorUpdateStatus') || 'Error al actualizar estado');
     }
   };
 
@@ -270,7 +281,7 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
       } else {
         alert(t('error') || 'Error: ' + result.message);
       }
-    } catch (err) {
+    } catch (_) {
       alert(t('error') || 'Error purging system');
     }
   };
@@ -305,9 +316,9 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
   };
 
   const filteredTickets = tickets.filter(ticket => {
-    const matchesSearch = ticket.subject.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         ticket.id.includes(searchTerm) || 
-                         ticket.user.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (ticket.subject || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         (ticket.id || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         (ticket.user || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || ticket.status === filterStatus;
     const matchesArea = filterArea === 'all' || ticket.department === filterArea;
     return matchesSearch && matchesStatus && matchesArea;
@@ -399,306 +410,254 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
           </div>
         </div>
       ) : activeTab === 'settings' ? (
-        <div className="glass-panel" style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto', animation: 'fadeIn 0.4s ease-out' }}>
-          <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-            {t('emailServerSettings')}
-          </h2>
-          <form onSubmit={handleTestSmtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {(testConnectionStatus === 'testing' || testConnectionStatus === 'sending') && (
-              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-main)' }}>
-                <svg style={{ animation: 'spin 1.5s linear infinite' }} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-                {testConnectionStatus === 'testing' ? t('connectionTesting') : t('sendingConfirmationEmail')}
-                <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-              </div>
-            )}
-            {testConnectionStatus === 'success' && (
-              <div style={{ padding: '1rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#10b981' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                {t('connectionSuccess')}
-              </div>
-            )}
-            {testConnectionStatus === 'error' && (
-              <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#ef4444' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                {t('connectionFailed')}
-              </div>
-            )}
+        <div style={{ animation: 'fadeIn 0.5s ease-out', maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem' }}>
+            {/* SMTP Configuration Card */}
+            <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column' }}>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--primary)', fontWeight: '700' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
+                {t('emailServerSettings')}
+              </h3>
+              
+              <form onSubmit={handleTestSmtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1 }}>
+                {(testConnectionStatus === 'testing' || testConnectionStatus === 'sending') && (
+                  <div className="connection-status-msg testing">
+                    <svg className="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
+                    {testConnectionStatus === 'testing' ? t('connectionTesting') : t('sendingConfirmationEmail')}
+                  </div>
+                )}
+                {testConnectionStatus === 'success' && (
+                  <div className="connection-status-msg success">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    {t('connectionSuccess')}
+                  </div>
+                )}
+                {testConnectionStatus === 'error' && (
+                  <div className="connection-status-msg error">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    {t('connectionFailed')}
+                  </div>
+                )}
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('smtpHost')}</label>
-              <input type="text" value={settingsForm.smtpHost} onChange={e => setSettingsForm({...settingsForm, smtpHost: e.target.value})} placeholder="smtp.ejemplo.com" required />
-            </div>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: '150px' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('smtpPort')}</label>
-                <input type="text" value={settingsForm.smtpPort} onChange={e => setSettingsForm({...settingsForm, smtpPort: e.target.value})} placeholder="587" required />
-              </div>
-              <div style={{ flex: 1, minWidth: '150px' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('smtpSecure') || 'TLS / SSL'}</label>
-                <select value={settingsForm.smtpSecure ? 'yes' : 'no'} onChange={e => setSettingsForm({...settingsForm, smtpSecure: e.target.value === 'yes'})}>
-                  <option value="yes">Sí (TLS/SSL)</option>
-                  <option value="no">No</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('smtpUser') || 'Usuario SMTP'}</label>
-              <input type="text" value={settingsForm.smtpUser} onChange={e => setSettingsForm({...settingsForm, smtpUser: e.target.value})} placeholder="usuario@ejemplo.com" required autoComplete="off" />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('smtpPass') || 'Contraseña SMTP'}</label>
-              <div style={{ position: 'relative' }}>
-                <input 
-                  type={showSmtpPass ? "text" : "password"} 
-                  value={settingsForm.smtpPass} 
-                  onChange={e => setSettingsForm({...settingsForm, smtpPass: e.target.value})} 
-                  placeholder="••••••••" 
-                  required 
-                  autoComplete="off" 
-                  style={{ paddingRight: '2.5rem', width: '100%' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSmtpPass(!showSmtpPass)}
-                  style={{
-                    position: 'absolute',
-                    right: '0.85rem',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    padding: '0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                  title={showSmtpPass ? t('hidePassword') : t('showPassword')}
-                >
-                  {showSmtpPass ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                  ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  )}
-                </button>
-              </div>
+                <div>
+                  <label className="input-label">{t('smtpHost')}</label>
+                  <input type="text" value={settingsForm.smtpHost} onChange={e => setSettingsForm({...settingsForm, smtpHost: e.target.value})} placeholder="smtp.ejemplo.com" required className="modern-input" />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="input-label">{t('smtpUser')}</label>
+                    <input type="text" value={settingsForm.smtpUser} onChange={e => setSettingsForm({...settingsForm, smtpUser: e.target.value})} placeholder="user@domain.com" required className="modern-input" />
+                  </div>
+                  <div>
+                    <label className="input-label">{t('smtpPort')}</label>
+                    <input type="text" value={settingsForm.smtpPort} onChange={e => setSettingsForm({...settingsForm, smtpPort: e.target.value})} placeholder="587" className="modern-input" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="input-label">{t('smtpPass')}</label>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type={showSmtpPass ? "text" : "password"} 
+                      value={settingsForm.smtpPass} 
+                      onChange={e => setSettingsForm({...settingsForm, smtpPass: e.target.value})} 
+                      placeholder="••••••••" 
+                      className="modern-input"
+                      style={{ paddingRight: '2.5rem' }}
+                    />
+                    <button type="button" onClick={() => setShowSmtpPass(!showSmtpPass)} className="input-icon-btn">
+                      {showSmtpPass ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: 'auto' }}>
+                  <label className="input-label" style={{ color: 'var(--text-main)', fontWeight: '700' }}>{t('testEmailDestination')}</label>
+                  <input type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="email@test.com" className="modern-input" style={{ marginBottom: '1rem' }} />
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button type="button" className="btn-secondary" onClick={handleTestSmtp} style={{ flex: 1 }} disabled={testConnectionStatus === 'testing' || !testEmail}>
+                      {testConnectionStatus === 'testing' ? <svg className="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> : t('testConnection')}
+                    </button>
+                    <button type="button" className="btn-primary" onClick={handlePersistSmtp} style={{ flex: 1 }}>{t('save')}</button>
+                  </div>
+                </div>
+              </form>
             </div>
 
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginTop: '0.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: '600' }}>{t('testEmailDestination')}</label>
-              <input 
-                type="email" 
-                value={testEmail} 
-                onChange={e => setTestEmail(e.target.value)} 
-                placeholder="ejemplo@destino.com" 
-                required 
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-              <button 
-                type="button" 
-                className="btn-secondary" 
-                onClick={handleTestSmtp}
-                style={{ flex: 1, padding: '1rem' }} 
-                disabled={testConnectionStatus === 'testing' || !testEmail}
-              >
-                {testConnectionStatus === 'testing' ? t('connectionTesting') : t('testConnection')}
-              </button>
-              <button 
-                type="button" 
-                onClick={handlePersistSmtp} 
-                className="btn-primary" 
-                style={{ flex: 1, padding: '1rem' }}
-              >
-                {t('save')}
-              </button>
-            </div>
-          </form>
-
-          <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '2rem 0' }} />
-
-          <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-            {t('dbConfig')}
-          </h2>
-
-          <form onSubmit={handleDBTest} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-             {dbTestStatus === 'testing' && (
-              <div style={{ padding: '1rem', background: 'var(--bg-hover)', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-main)' }}>
-                <svg style={{ animation: 'spin 1.5s linear infinite' }} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-                {t('connectionTesting')}
-              </div>
-            )}
-            {dbTestStatus === 'success' && (
-              <div style={{ padding: '1rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#10b981' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                {t('connectionSuccess')}
-              </div>
-            )}
-            {dbTestStatus === 'error' && (
-              <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#ef4444' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                {t('connectionFailed')}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <div style={{ flex: 3 }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('dbHost')}</label>
-                <input type="text" value={dbConfigForm.host} onChange={e => setDbConfigForm({...dbConfigForm, host: e.target.value})} placeholder="localhost" required />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('dbPort') || 'Port'}</label>
-                <input type="text" value={dbConfigForm.port} onChange={e => setDbConfigForm({...dbConfigForm, port: e.target.value})} placeholder="3306" required />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('dbUser')}</label>
-                <input type="text" value={dbConfigForm.user} onChange={e => setDbConfigForm({...dbConfigForm, user: e.target.value})} placeholder="root" required />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('dbPass')}</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type={showDbPass ? "text" : "password"} 
-                    value={dbConfigForm.password} 
-                    onChange={e => setDbConfigForm({...dbConfigForm, password: e.target.value})} 
-                    placeholder="••••••••" 
-                    autoComplete="off"
-                    style={{ paddingRight: '2.5rem', width: '100%' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowDbPass(!showDbPass)}
-                    style={{ position: 'absolute', right: '0.85rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    {showDbPass ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                    ) : (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                    )}
-                  </button>
+            {/* Database configuration (Supabase) */}
+            <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <h3 style={{ fontSize: '1.25rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#3ecf8e', fontWeight: '700' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+                  {t('databaseConfig')}
+                </h3>
+                
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem', 
+                  padding: '0.4rem 0.8rem', 
+                  borderRadius: '2rem', 
+                  background: settingsForm.supabaseStatus === 'connected' ? 'rgba(62, 207, 142, 0.1)' : settingsForm.supabaseStatus === 'disconnected' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(156, 163, 175, 0.1)',
+                  border: `1px solid ${settingsForm.supabaseStatus === 'connected' ? 'rgba(62, 207, 142, 0.2)' : settingsForm.supabaseStatus === 'disconnected' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(156, 163, 175, 0.2)'}`,
+                  color: settingsForm.supabaseStatus === 'connected' ? '#3ecf8e' : settingsForm.supabaseStatus === 'disconnected' ? '#ef4444' : 'var(--text-muted)',
+                  fontSize: '0.75rem',
+                  fontWeight: '600'
+                }}>
+                  <span style={{ 
+                    width: '8px', 
+                    height: '8px', 
+                    borderRadius: '50%', 
+                    background: settingsForm.supabaseStatus === 'connected' ? '#3ecf8e' : settingsForm.supabaseStatus === 'disconnected' ? '#ef4444' : '#9ca3af',
+                    boxShadow: settingsForm.supabaseStatus === 'connected' ? '0 0 8px #3ecf8e' : 'none'
+                  }}></span>
+                  {t(settingsForm.supabaseStatus || 'unknown')}
                 </div>
               </div>
-            </div>
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('dbName')}</label>
-              <input type="text" value={dbConfigForm.database} onChange={e => setDbConfigForm({...dbConfigForm, database: e.target.value})} placeholder="reporticket_master" required />
-            </div>
+              <form onSubmit={handleTestSupabase} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1 }}>
+                {dbTestStatus === 'testing' && (
+                  <div className="connection-status-msg testing">
+                    <svg className="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
+                    {t('connectionTesting')}
+                  </div>
+                )}
+                {dbTestStatus === 'success' && (
+                  <div className="connection-status-msg success" style={{ background: 'rgba(62, 207, 142, 0.1)', borderColor: 'rgba(62, 207, 142, 0.2)', color: '#3ecf8e' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    {t('connectionSuccess')}
+                  </div>
+                )}
+                {dbTestStatus === 'error' && (
+                  <div className="connection-status-msg error">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    {t('connectionFailed')}
+                  </div>
+                )}
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('dbMode')}</label>
-              <select value={dbConfigForm.mode} onChange={e => setDbConfigForm({...dbConfigForm, mode: e.target.value})}>
-                <option value="single">{t('dbModeSingle')}</option>
-                <option value="multi">{t('dbModeMulti')}</option>
-              </select>
-            </div>
+                <div>
+                  <label className="input-label">{t('supabaseUrl')}</label>
+                  <input 
+                    type="url" 
+                    value={settingsForm.supabaseUrl} 
+                    onChange={e => setSettingsForm({...settingsForm, supabaseUrl: e.target.value})} 
+                    placeholder="https://your-project.supabase.co" 
+                    required 
+                    className="modern-input" 
+                  />
+                </div>
 
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-              <button type="submit" className="btn-secondary" style={{ flex: 1, padding: '1rem' }} disabled={dbTestStatus === 'testing'}>
-                {dbTestStatus === 'testing' ? t('connectionTesting') : t('testDBConnection')}
-              </button>
-              <button type="button" onClick={handleDBSave} className="btn-primary" style={{ flex: 1, padding: '1rem' }}>
-                {t('saveDBConfig')}
-              </button>
-            </div>
-          </form>
+                <div>
+                  <label className="input-label">{t('supabaseKey')}</label>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type={showSupabaseKey ? "text" : "password"} 
+                      value={settingsForm.supabaseKey} 
+                      onChange={e => setSettingsForm({...settingsForm, supabaseKey: e.target.value})} 
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." 
+                      className="modern-input"
+                      style={{ paddingRight: '2.5rem' }}
+                    />
+                    <button type="button" onClick={() => setShowSupabaseKey(!showSupabaseKey)} className="input-icon-btn">
+                      {showSupabaseKey ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
+                    </button>
+                  </div>
+                </div>
 
-          {user.role === 'superadmin' && systemInfo.dbMode === 'single' && (
-            <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '2px dashed var(--border-color)' }}>
-              <h3 style={{ color: '#ef4444', fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                 {t('dangerZone')}
-              </h3>
-              <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '1.5rem', borderRadius: '0.75rem' }}>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
-                  {t('purgeWarning') || 'Esta acción eliminará permanentemente todos los tickets y notas de la base de datos de todas las empresas. No se puede deshacer.'}
-                </p>
-                <button 
-                  onClick={handlePurgeSystem}
-                  className="btn-primary" 
-                  style={{ background: '#ef4444', border: 'none', width: '100%', padding: '1rem' }}
-                >
-                  {t('cleanSystem') || 'Limpiar Sistema (Borrar Todo)'}
-                </button>
-              </div>
+                <div style={{ paddingBottom: '1rem', marginTop: 'auto' }}>
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button type="submit" className="btn-secondary" style={{ flex: 1 }} disabled={dbTestStatus === 'testing'}>
+                      {dbTestStatus === 'testing' ? <svg className="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> : t('testConnection')}
+                    </button>
+                    <button type="button" className="btn-primary" onClick={handlePersistSupabase} style={{ flex: 1, background: '#3ecf8e', borderColor: '#3ecf8e' }}>{t('save')}</button>
+                  </div>
+                </div>
+              </form>
             </div>
-          )}
+          </div>
+
+
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          <div className="glass-panel" style={{ padding: '2rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-              <div>
-                <h2 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>{t('createCompany')}</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(400px, 1fr) 2.5fr', gap: '2rem', alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div className="glass-panel" style={{ padding: '2rem' }}>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h2 style={{ fontSize: '1.25rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
+                  {t('createCompany')}
+                </h2>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('manageInfrastructure') || 'Gestión de infraestructura y bases de datos'}</p>
               </div>
-              <div style={{ textAlign: 'right', background: 'var(--bg-hover)', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t('dbMode') || 'Modo de Base de Datos'}</div>
-                <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: systemInfo.dbMode === 'multi' ? '#10b981' : 'var(--primary)' }}>
-                  {systemInfo.dbMode.toUpperCase()} {systemInfo.dbMode === 'multi' ? '(Aislado)' : '(Compartido)'}
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={handleCreateCompany} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '500px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('companyName')}</label>
+              <form onSubmit={handleCreateCompany} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div className="form-group">
+                  <label className="input-label">{t('companyName') || 'Nombre de la Empresa'}</label>
                   <input 
                     type="text" 
-                    placeholder={t('enterCompanyPlaceholder')} 
+                    className="modern-input"
+                    placeholder={t('enterCompanyPlaceholder') || 'Nombre de la empresa'} 
                     value={newCompanyName}
                     onChange={(e) => setNewCompanyName(e.target.value)}
-                    style={{ width: '100%' }}
+                    required
                   />
                 </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('administrator')}</label>
+                <div className="form-group">
+                   <label className="input-label">{t('databaseName') || 'Nombre de Identificación (BD)'}</label>
+                   <input 
+                     type="text" 
+                     className="modern-input"
+                     placeholder="ej: cliente_pro" 
+                     value={newCompanyDbName}
+                     onChange={(e) => setNewCompanyDbName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                     required
+                   />
+                </div>
+                <div className="form-group">
+                  <label className="input-label">{t('administrator')}</label>
                   <input 
                     type="text" 
-                    placeholder={t('enterNamePlaceholder')} 
+                    className="modern-input"
+                    placeholder={t('enterNamePlaceholder') || 'Nombre del administrador'} 
                     value={newAdminName}
                     onChange={(e) => setNewAdminName(e.target.value)}
-                    style={{ width: '100%' }}
+                    required
                   />
                 </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('emailAddress')}</label>
+                <div className="form-group">
+                  <label className="input-label">{t('emailAddress')}</label>
                   <input 
                     type="email" 
-                    placeholder={t('enterEmailPlaceholder')} 
+                    className="modern-input"
+                    placeholder={t('enterEmailPlaceholder') || 'correo@ejemplo.com'} 
                     value={newAdminEmail}
                     onChange={(e) => setNewAdminEmail(e.target.value)}
-                    style={{ width: '100%' }}
+                    required
                   />
                 </div>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('password')}</label>
+                <div className="form-group">
+                  <label className="input-label">{t('password')}</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <div style={{ flex: 1, position: 'relative' }}>
                       <input 
                         type={showNewAdminPass ? "text" : "password"} 
+                        className="modern-input"
                         placeholder="********" 
                         value={newAdminPassword}
                         onChange={(e) => setNewAdminPassword(e.target.value)}
-                        style={{ width: '100%', paddingRight: '2.5rem' }}
+                        required
+                        style={{ paddingRight: '2.5rem' }}
                       />
                       <button 
                         type="button"
+                        className="input-icon-btn"
                         onClick={() => setShowNewAdminPass(!showNewAdminPass)}
-                        style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex' }}
+                        style={{ right: '0.5rem' }}
                       >
                         {showNewAdminPass ? (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
                         ) : (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                         )}
                       </button>
                     </div>
@@ -706,58 +665,59 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
                       type="button" 
                       className="btn-outline" 
                       onClick={generateRandomPassword}
-                      style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                      style={{ padding: '0 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title={t('generate')}
                     >
-                      {t('generate')}
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3y-2.5z"></path></svg>
                     </button>
                   </div>
                 </div>
-              </div>
-              <button type="submit" className="btn-primary" style={{ padding: '1rem', marginTop: '0.5rem' }}>
-                {t('create')}
-              </button>
-            </form>
-            {companySuccessMessage && (
-              <div style={{ marginTop: '1rem', color: '#10b981', fontSize: '0.85rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                {companySuccessMessage}
-              </div>
-            )}
-            
+                <button type="submit" className="btn-primary" style={{ padding: '1rem', marginTop: '0.5rem', fontWeight: '700', fontSize: '0.95rem' }}>
+                  {t('createCompany')}
+                </button>
+              </form>
             {companies.length > 0 && (
               <div style={{ marginTop: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.9rem', marginBottom: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('registeredCompanies')}</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <h3 style={{ fontSize: '0.9rem', marginBottom: '1.25rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: '700' }}>{t('registeredCompanies')}</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {companies.map(c => (
-                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-hover)', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+                    <div key={c.id} className="table-row-hover" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--border-color)', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}>
                       {editingCompanyId === c.id ? (
                         <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
-                          <input 
-                            autoFocus
-                            type="text" 
-                            value={editCompanyName} 
-                            onChange={e => setEditCompanyName(e.target.value)} 
-                            style={{ padding: '0.2rem', fontSize: '0.85rem', flex: 1 }} 
-                            onKeyDown={e => e.key === 'Enter' && handleEditCompanySave(c.id)}
-                            disabled={user.role !== 'superadmin'}
-                          />
-                          <button onClick={() => handleEditCompanySave(c.id)} style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer' }}>✓</button>
-                          <button onClick={() => setEditingCompanyId(null)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>✕</button>
+                          <input autoFocus type="text" className="modern-input" value={editCompanyName} onChange={e => setEditCompanyName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleEditCompanySave(c.id)} style={{ padding: '0.5rem' }} />
+                          <button className="btn-primary" onClick={() => handleEditCompanySave(c.id)} style={{ padding: '0.5rem' }}>✓</button>
+                          <button className="btn-outline" onClick={() => setEditingCompanyId(null)} style={{ padding: '0.5rem', color: '#ef4444' }}>✕</button>
                         </div>
                       ) : (
                         <>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: '600' }}>{c.name}</span>
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'monospace' }}>
-                              DB: {c.db_name || 'Compartida'}
-                            </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <span style={{ color: 'var(--text-main)', fontSize: '1rem', fontWeight: '700' }}>{c.name}</span>
+                              <span style={{ 
+                                fontSize: '0.7rem', padding: '0.15rem 0.6rem', borderRadius: '2rem', 
+                                background: c.status === 'suspended' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                color: c.status === 'suspended' ? '#ef4444' : '#10b981',
+                                border: `1px solid ${c.status === 'suspended' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                                fontWeight: '700'
+                              }}>
+                                {t(c.status || 'active')}
+                              </span>
+                            </div>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'monospace', opacity: 0.8 }}>ID: {c.id}</span>
                           </div>
-                          <div style={{ display: 'flex', gap: '0.75rem' }}>
-                            <button onClick={() => handleEditCompanyStart(c)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', display: 'flex' }} title={t('edit')}>
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button onClick={() => handleToggleCompanyStatus(c.id, c.status)} className="input-icon-btn" style={{ position: 'static', color: c.status === 'suspended' ? 'var(--text-muted)' : '#10b981', padding: '0.5rem' }} title={c.status === 'suspended' ? t('activate') : t('suspend')}>
+                              {c.status === 'suspended' ? (
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                              ) : (
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                              )}
                             </button>
-                            <button onClick={() => handleDeleteCompany(c.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex' }} title={t('delete')}>
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            <button onClick={() => handleEditCompanyStart(c)} className="input-icon-btn" style={{ position: 'static', color: 'var(--primary)', padding: '0.5rem' }} title={t('edit')}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            </button>
+                            <button onClick={() => handleDeleteCompany(c.id)} className="input-icon-btn" style={{ position: 'static', color: '#ef4444', padding: '0.5rem' }} title={t('delete')}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                             </button>
                           </div>
                         </>
@@ -768,37 +728,40 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
               </div>
             )}
           </div>
+        </div>
 
-          <div className="glass-panel" style={{ padding: '2rem' }}>
-            <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>{t('manageUsers')}</h2>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+        <div className="glass-panel" style={{ padding: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+              {t('manageUsers')}
+            </h2>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: '0.5rem 1rem', borderRadius: '2rem', border: '1px solid var(--border-color)', fontWeight: '600' }}>
+                {users.length} {t('users')}
+              </div>
+            </div>
+            <div className="custom-scrollbar" style={{ overflowX: 'auto', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0', minWidth: '800px' }}>
                 <thead>
-                  <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
-                    <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('user')}</th>
-                    <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('emailAddress')}</th>
-                    <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('role')}</th>
-                    <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('company')}</th>
-                    <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('actions')}</th>
+                  <tr style={{ textAlign: 'left', background: 'var(--bg-hover)' }}>
+                    <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('user')}</th>
+                    <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('emailAddress')}</th>
+                    <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('role')}</th>
+                    <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('company')}</th>
+                    <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'right' }}>{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map(u => (
-                    <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <tr key={u.id} className="table-row-hover" style={{ transition: 'background 0.2s', borderTop: '1px solid var(--border-color)' }}>
                       {editingUserId === u.id ? (
                         <>
-                          <td style={{ padding: '1rem' }}>
-                            <input 
-                              type="text" 
-                              value={editUserForm.name} 
-                              onChange={e => setEditUserForm(f => ({...f, name: e.target.value}))} 
-                              style={{ padding: '0.4rem', width: '100%' }} 
-                              disabled={user.role !== 'superadmin'}
-                            />
+                          <td style={{ padding: '1rem 1.5rem' }}>
+                            <input type="text" className="modern-input" value={editUserForm.name} onChange={e => setEditUserForm(f => ({...f, name: e.target.value}))} style={{ padding: '0.5rem' }} />
                           </td>
-                          <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{u.email}</td>
-                          <td style={{ padding: '1rem' }}>
-                            <select value={editUserForm.role} onChange={e => setEditUserForm(f => ({...f, role: e.target.value}))} style={{ padding: '0.4rem' }}>
+                          <td style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)' }}>{u.email}</td>
+                          <td style={{ padding: '1rem 1.5rem' }}>
+                            <select className="modern-input" value={editUserForm.role} onChange={e => setEditUserForm(f => ({...f, role: e.target.value}))} style={{ padding: '0.5rem' }}>
                               <option value="customer">{t('roles.customer')}</option>
                               <option value="agent">{t('roles.agent')}</option>
                               <option value="supervisor">{t('roles.supervisor')}</option>
@@ -806,57 +769,63 @@ const AdminPanel = ({ stats, t, tickets, onSelectTicket, user, activeTab = 'tick
                               <option value="superadmin">{t('roles.superadmin')}</option>
                             </select>
                           </td>
-                          <td style={{ padding: '1rem' }}>
-                            <select 
-                              value={editUserForm.companyId || ''} 
-                              onChange={(e) => setEditUserForm(f => ({...f, companyId: e.target.value}))}
-                              style={{ padding: '0.4rem', width: '100%' }}
-                            >
-                              <option value="">-- {t('unassigned') || 'Sin Asignar'} --</option>
-                              {companies.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                              ))}
+                          <td style={{ padding: '1rem 1.5rem' }}>
+                            <select className="modern-input" value={editUserForm.companyId || ''} onChange={(e) => setEditUserForm(f => ({...f, companyId: e.target.value}))} style={{ padding: '0.5rem' }}>
+                              <option value="">-- {t('unassigned')} --</option>
+                              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                           </td>
                         </>
                       ) : (
                         <>
-                          <td style={{ padding: '1rem', fontWeight: '600' }}>{u.name}</td>
-                          <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{u.email}</td>
-                          <td style={{ padding: '1rem' }}>
-                            <span className={`badge badge-${u.role === 'superadmin' ? 'closed' : (u.role === 'admin' ? 'old' : (u.role === 'supervisor' ? 'inprogress' : 'open'))}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>
-                              {t(`roles.${u.role}`)}
-                            </span>
+                          <td style={{ padding: '1.25rem 1.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--gradient-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                                {u.name.charAt(0).toUpperCase()}
+                              </div>
+                              <span style={{ fontWeight: '700', color: 'var(--text-main)' }}>{u.name}</span>
+                            </div>
                           </td>
-                          <td style={{ padding: '1rem' }}>
+                          <td style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{u.email}</td>
+                          <td style={{ padding: '1.25rem 1.5rem' }}>
+                              <span className={`badge badge-${u.role === 'superadmin' ? 'closed' : (u.role === 'admin' ? 'old' : (u.role === 'supervisor' ? 'inprogress' : 'open'))}`} style={{ fontSize: '0.7rem', padding: '0.25rem 0.75rem', borderRadius: '2rem', fontWeight: '700', textTransform: 'uppercase' }}>
+                                {t(`roles.${u.role}`)}
+                              </span>
+                          </td>
+                          <td style={{ padding: '1.25rem 1.5rem' }}>
                             {u.role === 'superadmin' ? (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>N/A (Multi-Empresa)</span>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', background: 'var(--bg-hover)', padding: '0.25rem 0.75rem', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>{t('allCompanies')}</span>
                             ) : (
-                              <span style={{ fontSize: '0.9rem' }}>
-                                {companies.find(c => String(c.id) === String(u.companyId))?.name || (t('unassigned') || 'Sin Asignar')}
+                              <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>
+                                {companies.find(c => String(c.id) === String(u.companyId))?.name || <em style={{ opacity: 0.5 }}>{t('unassigned')}</em>}
                               </span>
                             )}
                           </td>
                         </>
                       )}
-
-                      <td style={{ padding: '1rem' }}>
-                        {editingUserId === u.id ? (
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={() => handleEditUserSave(u.id)} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>{t('save')}</button>
-                            <button onClick={() => setEditingUserId(null)} style={{ background: 'none', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', cursor: 'pointer' }}>{t('cancel')}</button>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={() => handleEditUserStart(u)} style={{ background: 'none', border: '1px solid var(--primary)', color: 'var(--primary)', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>{t('edit')}</button>
-                            <button onClick={() => handleOpenPermissions(u)} style={{ background: 'none', border: '1px solid #8b5cf6', color: '#8b5cf6', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center' }} title={t('permissions')}>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                            </button>
-                            {user.id !== u.id && (
-                              <button onClick={() => handleDeleteUser(u.id)} style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', padding: '0.4rem 0.8rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>{t('delete')}</button>
-                            )}
-                          </div>
-                        )}
+                      <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                          {editingUserId === u.id ? (
+                            <>
+                              <button onClick={() => handleEditUserSave(u.id)} className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}>{t('save')}</button>
+                              <button onClick={() => setEditingUserId(null)} className="btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}>{t('cancel')}</button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => handleEditUserStart(u)} className="table-action-btn" style={{ color: 'var(--primary)' }} title={t('edit')}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                              </button>
+                              <button onClick={() => handleOpenPermissions(u)} className="table-action-btn" style={{ color: '#8b5cf6' }} title={t('permissions')}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                              </button>
+                              {user.id !== u.id && (
+                                <button onClick={() => handleDeleteUser(u.id)} className="table-action-btn" style={{ color: '#ef4444' }} title={t('delete')}>
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -23,7 +23,7 @@ function App() {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [userRole, setUserRole] = useState('customer');
   const [isLoaded, setIsLoaded] = useState(false);
-  const [dbHealth, setDbHealth] = useState({ status: 'unknown', latency: 0 });
+
 
   // Initialize session
   useEffect(() => {
@@ -52,16 +52,7 @@ function App() {
       dbService.getTickets().then(setAllTickets).catch(console.error);
       dbService.getUsers().then(setAllUsers).catch(console.error);
       
-      const check = () => {
-        dbService.checkHealth()
-          .then(setDbHealth)
-          .catch(err => {
-            setDbHealth({ status: 'offline', latency: 0, error: err.message });
-          });
-      };
-      check();
-      const interval = setInterval(check, 60000);
-      return () => clearInterval(interval);
+
     }
   }, [currentUser]);
   
@@ -96,7 +87,7 @@ function App() {
     const s = {
       open: currentTickets.filter(t => t.status !== 'closed').length,
       overdue: currentTickets.filter(t => t.status === 'old').length,
-      unassigned: currentTickets.filter(t => !t.agent).length,
+      unassigned: currentTickets.filter(t => !t.agentId).length,
       closed: currentTickets.filter(t => t.status === 'closed').length
     };
     setStats(s);
@@ -194,8 +185,8 @@ function App() {
                 minWidth: '100vw',
                 minHeight: '56.25vw',
                 transform: 'translate(-50%, -50%) scale(1.1)',
-                opacity: 0.4,
-                filter: 'blur(8px) brightness(0.9)',
+                opacity: theme === 'light' ? 0.65 : 0.4,
+                filter: theme === 'light' ? 'blur(4px) brightness(1.05)' : 'blur(8px) brightness(0.8)',
                 pointerEvents: 'none'
               }}
             ></iframe>
@@ -257,7 +248,7 @@ function App() {
         userRole={userRole}
         setUserRole={setUserRole}
         user={currentUser}
-        dbHealth={dbHealth}
+
         onLogout={() => { dbService.setSession(null); setCurrentUser(null); handleViewChange('landing'); }}
         t={t}
       >

@@ -136,7 +136,6 @@ const Profile = ({ user, t, onUpdate }) => {
           </div>
           <div style={{ textAlign: 'center' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>{t('profilePhoto')}</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('joinUs')}</p>
           </div>
         </div>
         

@@ -132,7 +132,10 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
                 {t('tickets')}
               </button>
             </li>
-            {(userRole === 'superadmin' || user?.permissions?.manageUsers) && (
+            
+            {(userRole?.toLowerCase().includes('admin') || userRole?.toLowerCase().includes('super') || 
+              user?.role?.toLowerCase().includes('admin') || user?.role?.toLowerCase().includes('super') || 
+              user?.permissions?.manageUsers) && (
               <li>
                 <button 
                   onClick={() => { setView('usersAndCompanies'); setIsSidebarOpen(false); }} 
@@ -144,10 +147,11 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
                 </button>
               </li>
             )}
-            {(userRole === 'superadmin') && (
+
+            {(user?.id) && ( // MODO DEBUG: Acceso habilitado temporalmente
               <li>
                 <button 
-                  onClick={() => { setView('settings'); setIsSidebarOpen(false); }} 
+                  onClick={() => { console.log('Navigating to settings. Roles:', userRole, user?.role); setView('settings'); setIsSidebarOpen(false); }} 
                   className={`nav-link-btn ${currentView === 'settings' ? 'active' : ''}`}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}
                 >
@@ -180,34 +184,7 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
         </nav>
         
         <div style={{ position: 'absolute', bottom: '2rem', left: '2rem', right: '2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {user?.role === 'superadmin' && dbHealth && (
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.6rem', 
-              padding: '0.75rem', 
-              background: 'rgba(0,0,0,0.15)', 
-              borderRadius: '0.75rem',
-              border: '1px solid var(--border-color)',
-              animation: 'fadeIn 0.5s ease'
-            }}>
-              <div style={{ 
-                width: '8px', 
-                height: '8px', 
-                borderRadius: '50%', 
-                background: dbHealth.status === 'healthy' ? (dbHealth.latency > 300 ? '#facc15' : '#10b981') : '#ef4444',
-                boxShadow: dbHealth.status === 'healthy' && dbHealth.latency <= 300 ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none',
-                transition: 'all 0.3s ease'
-              }}></div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('dbStatus')}</span>
-                  {dbHealth.latency > 0 && <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: '600' }}>{dbHealth.latency}ms</span>}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-main)', fontWeight: '500' }}>{t(dbHealth.status)}</div>
-              </div>
-            </div>
-          )}
+          {/* Database status indicator removed as per user request */}
           <div className="glass-panel" style={{ 
             padding: '1rem', 
             display: 'flex', 
@@ -225,9 +202,23 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
               background: user?.photo ? `url(${user.photo}) center/cover` : 'linear-gradient(45deg, var(--primary), var(--secondary))',
               border: '2px solid var(--border-color)'
             }}></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: '0.85rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || t('adminAgent')}</p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t(`roles.${user?.role || 'customer'}`)}</p>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <p style={{ fontSize: '0.85rem', fontWeight: '600', margin: 0, wordBreak: 'break-word' }}>
+                  {user?.name || t('adminAgent')}
+                </p>
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  alignItems: 'center', 
+                  gap: '0.4rem', 
+                  fontSize: '0.7rem', 
+                  color: 'var(--text-muted)',
+                  lineHeight: '1.2'
+                }}>
+                  <span style={{ whiteSpace: 'nowrap' }}>{t(`roles.${user?.role || 'customer'}`)} ({userRole || user?.role || 'N/A'})</span>
+                  <span style={{ opacity: 0.3 }}>|</span>
+                  <span style={{ opacity: 0.7, fontSize: '0.65rem', wordBreak: 'break-all' }}>{user?.email || 'No Email'}</span>
+                </div>
               </div>
             </div>
             

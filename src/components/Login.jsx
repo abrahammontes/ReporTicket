@@ -193,20 +193,8 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error, successMsg, langu
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      style={{
-                        position: 'absolute',
-                        right: '0.85rem',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        padding: '0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
+                      className="input-icon-btn"
+                      style={{ right: '0.5rem' }}
                       title={showPassword ? t('hidePassword') : t('showPassword')}
                     >
                       {showPassword ? (

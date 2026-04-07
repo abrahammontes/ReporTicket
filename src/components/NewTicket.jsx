@@ -18,10 +18,17 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
     
     const validFiles = files.filter(file => {
       const ext = file.name.split('.').pop().toLowerCase();
-      return allowedExtensions.includes(ext);
+      const isValidExt = allowedExtensions.includes(ext);
+      const isValidSize = file.size <= 10 * 1024 * 1024; // 10 MB limit
+      
+      if (!isValidSize) {
+        alert(t('fileSizeExceeded') || 'File size exceeds 10MB limit: ' + file.name);
+      }
+      return isValidExt && isValidSize;
     });
     
     setAttachments(prev => [...prev, ...validFiles.map(f => ({
+      file: f,
       name: f.name,
       size: (f.size / 1024).toFixed(1) + ' KB',
       type: f.type,
@@ -33,25 +40,45 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
     setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (submitting) return;
     setSubmitting(true);
-    // Generate a simple ticket ID (in a real app, this would come from the backend or be a UUID)
+    
+    // Generate a simple ticket ID
     const ticketId = 'TICK-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+    
+    let finalAttachments = [];
+    if (attachments.length > 0) {
+      const { dbService } = await import('../services/db');
+      for (const item of attachments) {
+        try {
+          const res = await dbService.uploadFile(item.file);
+          if (res.success && res.url) {
+            finalAttachments.push({
+              id: item.id,
+              name: item.name,
+              size: item.size,
+              type: item.type,
+              url: res.url
+            });
+          }
+        } catch (err) {
+          console.error('File upload failed for', item.name, err);
+        }
+      }
+    }
     
     onSubmit({
       id: ticketId,
       subject: formData.subject,
       description: formData.description,
-      user_id: user?.user_id || user?.id || '', // Extract user_id from user object
+      userId: user?.userId || user?.id || '',
       priority: formData.priority,
-      department: formData.department
-      // Note: attachments are not sent here as the backend doesn't handle them yet
-      // In a full implementation, you'd upload attachments separately and associate them with the ticket
+      department: formData.department,
+      attachments: finalAttachments
     }).then(() => {
       setTicketSuccess(true);
       setSubmitting(false);
-      // Reset form after success
       setFormData({
         subject: '',
         department: 'support',

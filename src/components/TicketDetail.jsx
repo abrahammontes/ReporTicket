@@ -8,6 +8,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
   });
   const [newNote, setNewNote] = useState('');
   const [attachments, setAttachments] = useState([]);
+  const [selectedFiles, setSelectedFiles] = useState([]); // Store actual File objects
   const fileInputRef = useRef(null);
   const [isInternal, setIsInternal] = useState(false);
   const [pendingUpdates, setPendingUpdates] = useState({});
@@ -132,28 +133,56 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
    };
 
    const handleAddNote = async () => {
-     if (!newNote.trim()) return;
+     if (!newNote.trim() && selectedFiles.length === 0) return;
      setIsSaving(true);
-     setSaveMessage(t('savingTicket')); // "guardando ticket"
-     let notes = localTicket.notes || [];
-     if (typeof notes === 'string') {
-       try {
-         notes = JSON.parse(notes);
-       } catch (e) {
-         notes = [];
-       }
-     }
-     if (!Array.isArray(notes)) notes = [];
-
-     const noteData = {
-       id: Date.now(),
-       text: newNote,
-       type: isInternal ? 'internal' : 'public',
-       date: new Date().toLocaleString(),
-       attachments: attachments
-     };
      
+     let finalAttachments = [...attachments];
+
      try {
+       if (selectedFiles.length > 0) {
+         setSaveMessage('Subiendo archivos...');
+         const uploadedFiles = [];
+         
+         for (const item of selectedFiles) {
+           try {
+             const res = await dbService.uploadFile(item.file);
+             if (res.success && res.url) {
+               uploadedFiles.push({
+                 id: item.id,
+                 url: res.url
+               });
+             }
+           } catch (err) {
+             console.error('File upload failed for', item.file.name, err);
+           }
+         }
+         
+         finalAttachments = finalAttachments.map(att => {
+           const uploaded = uploadedFiles.find(u => u.id === att.id);
+           if (uploaded) return { ...att, url: uploaded.url };
+           return att;
+         });
+       }
+
+       setSaveMessage(t('savingTicket')); // "guardando ticket"
+       let notes = localTicket.notes || [];
+       if (typeof notes === 'string') {
+         try {
+           notes = JSON.parse(notes);
+         } catch (e) {
+           notes = [];
+         }
+       }
+       if (!Array.isArray(notes)) notes = [];
+
+       const noteData = {
+         id: Date.now(),
+         text: newNote,
+         type: isInternal ? 'internal' : 'public',
+         date: new Date().toLocaleString(),
+         attachments: finalAttachments
+       };
+       
        const result = await dbService.updateTicket(localTicket.id, {
          notes: [...notes, noteData]
        });
@@ -164,6 +193,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
          }));
          setNewNote('');
          setAttachments([]);
+         setSelectedFiles([]);
          setShowSuccess(true);
          setTimeout(() => setShowSuccess(false), 3000);
          if (onUpdate) onUpdate();
@@ -211,19 +241,33 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
     
     const validFiles = files.filter(file => {
       const ext = file.name.split('.').pop().toLowerCase();
-      return allowedExtensions.includes(ext);
+      const isValidExt = allowedExtensions.includes(ext);
+      const isValidSize = file.size <= 10 * 1024 * 1024; // 10 MB limit
+
+      if (!isValidSize) {
+        alert(t('fileSizeExceeded') || 'File size exceeds 10MB limit: ' + file.name);
+      }
+      return isValidExt && isValidSize;
     });
 
-    setAttachments(prev => [...prev, ...validFiles.map(f => ({
-      name: f.name,
-      size: (f.size / 1024).toFixed(1) + ' KB',
-      type: f.type,
-      id: Math.random().toString(36).substr(2, 9)
-    }))]);
+    const newAttachments = validFiles.map(f => {
+      const id = Math.random().toString(36).substr(2, 9);
+      // Store the actual file for uploading
+      setSelectedFiles(prev => [...prev, { id, file: f, type: f.type }]);
+      return {
+        name: f.name,
+        size: (f.size / 1024).toFixed(1) + ' KB',
+        type: f.type,
+        id: id
+      };
+    });
+
+    setAttachments(prev => [...prev, ...newAttachments]);
   };
 
   const removeAttachment = (id) => {
     setAttachments(prev => prev.filter(a => a.id !== id));
+    setSelectedFiles(prev => prev.filter(f => f.id !== id));
   };
 
   const hasChanges = Object.keys(pendingUpdates).some(key => pendingUpdates[key] !== localTicket[key]);
@@ -279,9 +323,20 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>{t('attachments')}</p>
                 <div className="attachment-grid">
                   {localTicket.attachments.map(file => (
-                    <a key={file.id} href="#" className="attachment-tag" onClick={(e) => e.preventDefault()}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-                      {file.name} ({file.size})
+                    <a 
+                      key={file.id} 
+                      href={file.url || '#'} 
+                      download={file.displayName || file.name}
+                      target={file.url ? "_blank" : undefined}
+                      rel={file.url ? "noopener noreferrer" : undefined}
+                      className="attachment-tag" 
+                      onClick={(e) => { if (!file.url) e.preventDefault(); }}
+                      style={{ cursor: file.url ? 'pointer' : 'default' }}
+                      title={`${file.displayName || file.name} (${file.size})`}
+                    >
+                      <svg style={{ flexShrink: 0 }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                      <span>{file.displayName || file.name}</span>
+                      <span style={{ flexShrink: 0, opacity: 0.7 }}>({file.size})</span>
                     </a>
                   ))}
                 </div>
@@ -292,7 +347,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
           <div className="activity-section">
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem' }}>{t('recentActivity')}</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
-              {(localTicket.notes || []).map(note => (
+              {(localTicket.notes || []).map((note, idx) => (
                 <div key={note.id} className="glass-panel" style={{
                   padding: '1rem',
                   borderLeft: note.type === 'internal' ? '4px solid #facc15' : '1px solid var(--border-color)',
@@ -305,13 +360,30 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{note.date}</span>
                   </div>
                   <p style={{ fontSize: '0.95rem', margin: 0 }}>{note.text}</p>
+                  <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: '600', color: 'var(--text-muted)', opacity: 0.8 }}>
+                      Registro {idx + 1}
+                    </span>
+                  </div>
                   
                   {note.attachments && note.attachments.length > 0 && (
                     <div className="attachment-grid" style={{ marginTop: '0.75rem' }}>
                       {note.attachments.map(file => (
-                        <a key={file.id} href="#" className="attachment-tag" onClick={(e) => e.preventDefault()} style={{ background: 'var(--bg-input)' }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-                          {file.name}
+                        <a 
+                          key={file.id} 
+                          href={file.url || '#'} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          download={file.displayName || file.name}
+                          className="attachment-tag" 
+                          style={{ background: 'var(--bg-input)', cursor: file.url ? 'pointer' : 'default' }}
+                          onClick={(e) => { if (!file.url) e.preventDefault(); }}
+                          title={file.displayName || file.name}
+                        >
+                          <svg style={{ flexShrink: 0 }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                          <span>
+                            {file.displayName || file.name}
+                          </span>
                         </a>
                       ))}
                     </div>
@@ -576,8 +648,8 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{t('assignTo') || 'Asignar a'}</label>
                   <select
-                    value={pendingUpdates.agent_id !== undefined ? pendingUpdates.agent_id : (localTicket.agent_id || '')}
-                    onChange={(e) => handleFieldChange('agent_id', e.target.value)}
+                    value={pendingUpdates.agentId !== undefined ? pendingUpdates.agentId : (localTicket.agentId || '')}
+                    onChange={(e) => handleFieldChange('agentId', e.target.value)}
                     style={{ width: '100%', opacity: isRestricted ? 0.6 : 1, cursor: isRestricted ? 'not-allowed' : 'pointer' }}
                     disabled={isRestricted}
                   >
