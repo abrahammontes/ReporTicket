@@ -115,14 +115,22 @@ let currentSettings = loadSettings();
 let supabase = null;
 
 const initSupabase = () => {
-    const url = currentSettings.supabaseConfig.supabaseUrl || process.env.SUPABASE_URL;
-    const key = decrypt(currentSettings.supabaseConfig.supabaseKey) || process.env.SUPABASE_KEY;
+    // Prioritize Environment Variables for Production stability
+    const url = process.env.SUPABASE_URL || currentSettings.supabaseConfig.supabaseUrl;
+    const key = process.env.SUPABASE_KEY || decrypt(currentSettings.supabaseConfig.supabaseKey);
 
     if (url && key) {
-        supabase = createClient(url, key);
-        console.log('Supabase client initialized');
+        try {
+            supabase = createClient(url, key);
+            console.log('Supabase client initialized successfully');
+            if (process.env.NODE_ENV === 'production') console.log('Production DB connected');
+        } catch (e) {
+            console.error('CRITICAL: Supabase client initialization failed:', e.message);
+        }
     } else {
-        console.warn('Supabase credentials missing, server in standalone-lite mode');
+        console.warn('Supabase credentials missing (URL or KEY). Server in standalone-lite mode');
+        if (!url) console.warn('- Missing SUPABASE_URL');
+        if (!key) console.warn('- Missing SUPABASE_KEY');
     }
 };
 

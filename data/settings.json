@@ -7,13 +7,10 @@
     "smtpSecure": false
   },
   "supabaseConfig": {
-    "smtpHost": "",
-    "smtpPort": "587",
     "smtpUser": "abraham.montes@gmail.com",
     "smtpPass": "admin123",
-    "smtpSecure": false,
     "supabaseUrl": "https://jdfmtzcppskjzmsjivzp.supabase.co",
-    "supabaseKey": "87d84a1863db9cb768d078f6313cbf8f:b884e80dcb58d7bd724330381ab5f261988b6fa84974d10ff43b4b1607afe39e41edd42db93477683e7b669de2c130bb2940efeb4f68dff9b9305e18a60a4112eec3b96eb0cc657cb4dbfcb92cf83e0a0388f0423cb8d8f78576fe46ad3ed92a0cce4d3f1a619dcf6e15606b83c7874ae4e69cf7f33ca96d249c25c34fce8f15cbcdc7b6a93d44215f8259a3e9213d1c4c81efd754c0b30cb170a94058e0623fbb946f209d9b8519268c5b25ac2c80fefb0025044459ea24a100e4e1a280d569ec3fd2d99674889b9f50dee2498cd5096b4174667b4034c611dfb2b68510ca1d",
+    "supabaseKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkZm10emNwcHNranptc2ppdnpwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTUyODA4MywiZXhwIjoyMDkxMTA0MDgzfQ.lIvA-SagHhf_FH-Wcd8rLte_h2-RiS5sLO9Bk2vopeE",
     "supabaseStatus": "connected"
   }
 }
