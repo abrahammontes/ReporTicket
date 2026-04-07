@@ -1,7 +1,7 @@
 {
   "smtpConfig": {
     "smtpHost": "",
-    "smtpPort": "587",
+    "smtpPort": "567",
     "smtpUser": "",
     "smtpPass": "",
     "smtpSecure": false
