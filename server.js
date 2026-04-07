@@ -109,6 +109,49 @@ const toSnake = (obj) => {
     return obj;
 };
 
+// --- EMAIL UTILITIES ---
+
+const sendSystemEmail = async (to, subject, text, html) => {
+    const settings = loadSettings();
+    const config = settings.smtpConfig;
+
+    if (!config || !config.smtpHost || !config.smtpUser || !config.smtpPass) {
+        console.warn('[SMTP] Email not sent: Configuration missing');
+        return false;
+    }
+
+    try {
+        const password = decrypt(config.smtpPass);
+        const isSecure = String(config.smtpPort) === '465' || config.smtpSecure === true;
+
+        const transporter = nodemailer.createTransport({
+            host: config.smtpHost,
+            port: parseInt(config.smtpPort),
+            secure: isSecure,
+            auth: {
+                user: config.smtpUser,
+                pass: password
+            },
+            tls: {
+                rejectUnauthorized: false
+            }
+        });
+
+        const info = await transporter.sendMail({
+            from: `"ReporTicket" <${config.smtpUser}>`,
+            to,
+            subject,
+            text,
+            html
+        });
+        console.log('[SMTP] Email sent:', info.messageId);
+        return true;
+    } catch (e) {
+        console.error('[SMTP] Critical Error sending email:', e.message);
+        return false;
+    }
+};
+
 // --- INITIALIZE SUPABASE CLIENT ---
 
 let currentSettings = loadSettings();
@@ -178,14 +221,24 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/tickets', async (req, res) => {
     const userRole = req.headers['x-user-role'];
     const userId = req.headers['x-user-id'];
+    const companyId = req.headers['x-company-id'];
+    
     if (!supabase) return res.json({ success: true, tickets: [] });
 
     try {
         let query = supabase.from('tickets').select('*, users!user_id(name), agents:users!agent_id(name), ticket_notes(*)');
 
+        // Access Control Logic
         if (userRole === 'customer') {
+            // Customers only see their own tickets
             query = query.eq('user_id', userId);
+        } else if (userRole === 'admin' || userRole === 'agent') {
+            // Company admins/agents see tickets for their specific company
+            if (companyId && companyId !== 'master') {
+                query = query.eq('company_id', companyId);
+            }
         }
+        // Superadmins see all tickets (no filter)
 
         const { data: tickets, error } = await query.order('created_at', { ascending: false });
         if (error) throw error;
@@ -278,10 +331,12 @@ app.post('/api/tickets', async (req, res) => {
 
     try {
         const { attachments, ...otherData } = req.body;
+        const companyId = req.headers['x-company-id'];
 
         const ticketData = toSnake({
             ...otherData,
-            status: 'open'
+            status: 'open',
+            companyId: companyId && companyId !== 'master' ? companyId : (otherData.companyId || null)
         });
 
         const { data: insertedTicket, error } = await supabase.from('tickets').insert([ticketData]).select();
@@ -367,9 +422,19 @@ app.delete('/api/tickets/:id', async (req, res) => {
 // --- USERS & COMPANIES ---
 
 app.get('/api/users', async (req, res) => {
+    const userRole = req.headers['x-user-role'];
+    const companyId = req.headers['x-company-id'];
+
     if (!supabase) return res.json({ success: true, users: [] });
     try {
-        const { data: users, error } = await supabase.from('users').select('*').neq('role', 'superadmin');
+        let query = supabase.from('users').select('*').neq('role', 'superadmin');
+        
+        // Admins only see users from their company
+        if (userRole === 'admin' && companyId && companyId !== 'master') {
+            query = query.eq('company_id', companyId);
+        }
+
+        const { data: users, error } = await query;
         if (error) throw error;
         res.json({ success: true, users: toCamel(users) });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -410,6 +475,20 @@ app.patch('/api/users/:id', async (req, res) => {
     }
 });
 
+app.post('/api/users', async (req, res) => {
+    if (!supabase) return res.status(503).json({ success: false, message: 'Database not connected' });
+    try {
+        const userData = toSnake(req.body);
+        if (!userData.status) userData.status = 'active'; // Admin-created users are active by default
+        if (userData.password) {
+            userData.password = await bcrypt.hash(userData.password, 10);
+        }
+        const { data, error } = await supabase.from('users').insert([userData]).select();
+        if (error) throw error;
+        res.json({ success: true, user: toCamel(data[0]) });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 app.delete('/api/users/:id', async (req, res) => {
     if (!supabase) return res.status(503).json({ success: false, message: 'Database not connected' });
     try {
@@ -424,10 +503,31 @@ app.delete('/api/users/:id', async (req, res) => {
 app.patch('/api/companies/:id', async (req, res) => {
     if (!supabase) return res.status(503).json({ success: false, message: 'Database not connected' });
     try {
+        // Protection for Demo
+        const { data: comp } = await supabase.from('companies').select('name').eq('id', req.params.id).single();
+        if (comp && comp.name === 'ReporTicket Demo') {
+            return res.status(403).json({ success: false, message: 'La empresa Demo no se puede modificar.' });
+        }
+
         const updateData = toSnake(req.body);
         const { error } = await supabase.from('companies').update(updateData).eq('id', req.params.id);
         if (error) throw error;
         res.json({ success: true, message: 'Company updated' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+app.delete('/api/companies/:id', async (req, res) => {
+    if (!supabase) return res.status(503).json({ success: false, message: 'Database not connected' });
+    const userRole = req.headers['x-user-role'];
+    try {
+        const { data: comp } = await supabase.from('companies').select('name').eq('id', req.params.id).single();
+        if (comp && comp.name === 'ReporTicket Demo' && userRole !== 'superadmin') {
+            return res.status(403).json({ success: false, message: 'Solo el Super Administrador puede eliminar la empresa Demo.' });
+        }
+
+        const { error } = await supabase.from('companies').delete().eq('id', req.params.id);
+        if (error) throw error;
+        res.json({ success: true, message: 'Company deleted' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
@@ -451,11 +551,46 @@ app.post('/api/register-company', async (req, res) => {
             password: hashedPassword,
             role: 'admin',
             company_id: companyId,
+            status: 'active',
             permissions: { view_all_tickets: true, assign_tickets: true, manage_users: true, manage_companies: false }
         }]);
         if (userError) throw userError;
 
         res.json({ success: true, companyId, message: 'Company and Admin created' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+app.post('/api/register', async (req, res) => {
+    if (!supabase) return res.status(503).json({ success: false, message: 'Database not connected' });
+    try {
+        const { name, email, password, phone, extension } = req.body;
+        const userId = 'user-' + Date.now();
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const { error } = await supabase.from('users').insert([{
+            id: userId,
+            name,
+            email,
+            password: hashedPassword,
+            phone,
+            extension,
+            role: 'customer',
+            status: 'pending'
+        }]);
+        
+        if (error) throw error;
+
+        // Try to notify the user via SMTP if configured
+        sendSystemEmail(
+            email, 
+            'ReporTicket: Registro recibido (Pendiente de activación)', 
+            `Hola ${name}, tu registro en ReporTicket ha sido exitoso. Actualmente tu cuenta está en estado 'Pendiente' y deberá ser activada por un administrador para que puedas crear tickets. Recibirás un correo cuando tu cuenta esté lista.`,
+            `<h2>Hola ${name}</h2><p>Tu registro en <b>ReporTicket</b> ha sido exitoso.</p><p>Actualmente tu cuenta está en estado <b>'Pendiente'</b> y deberá ser activada por un administrador para que puedas crear tickets. Recibirás un correo cuando tu cuenta esté lista.</p>`
+        );
+
+        res.json({ success: true, message: 'Registration successful. Waiting for admin activation.' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -499,6 +634,51 @@ app.post('/api/settings', (req, res) => {
     initSupabase();
 
     res.json({ success: true, message: 'Settings saved and server re-initialized' });
+});
+
+app.post('/api/send-test-email', async (req, res) => {
+    const { smtpHost, smtpPort, smtpUser, smtpPass, smtpSecure, testRecipient, testEmail } = req.body;
+    const destination = testEmail || testRecipient || smtpUser;
+    
+    if (!smtpHost || !smtpUser || !smtpPass) {
+        return res.status(400).json({ success: false, message: 'Faltan datos de configuración SMTP' });
+    }
+
+    try {
+        const password = smtpPass.includes(':') ? decrypt(smtpPass) : smtpPass;
+        const isSecure = String(smtpPort) === '465' || smtpSecure === true;
+
+        console.log(`[SMTP Test] Attempting to send to ${destination} via ${smtpHost}:${smtpPort} (Secure: ${isSecure})`);
+
+        const transporter = nodemailer.createTransport({
+            host: smtpHost,
+            port: parseInt(smtpPort),
+            secure: isSecure,
+            auth: {
+                user: smtpUser,
+                pass: password
+            },
+            tls: {
+                rejectUnauthorized: false
+            }
+        });
+
+        // Verify connection first
+        await transporter.verify();
+
+        await transporter.sendMail({
+            from: `"ReporTicket Test" <${smtpUser}>`,
+            to: destination,
+            subject: "ReporTicket: Prueba de Configuración",
+            text: "✅ Tu configuración SMTP funciona correctamente.",
+            html: "<b>✅ Tu configuración SMTP funciona correctamente.</b>"
+        });
+
+        res.json({ success: true, message: 'Correo de prueba enviado con éxito' });
+    } catch (e) {
+        console.error('SMTP test failed:', e);
+        res.status(500).json({ success: false, message: 'Error SMTP: ' + e.message });
+    }
 });
 
 app.post('/api/test-supabase', async (req, res) => {

@@ -148,10 +148,10 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
               </li>
             )}
 
-            {(user?.id) && ( // MODO DEBUG: Acceso habilitado temporalmente
+            {(userRole === 'superadmin' || user?.role === 'superadmin') && ( 
               <li>
                 <button 
-                  onClick={() => { console.log('Navigating to settings. Roles:', userRole, user?.role); setView('settings'); setIsSidebarOpen(false); }} 
+                  onClick={() => { setView('settings'); setIsSidebarOpen(false); }} 
                   className={`nav-link-btn ${currentView === 'settings' ? 'active' : ''}`}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}
                 >

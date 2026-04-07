@@ -122,27 +122,14 @@ function App() {
     }
   };
 
-    const handleRegister = async (userData) => {
-      setAuthError(null);
-      try {
-        // 1. Create company and its database (using user's name as company name since company field removed)
-        const regResult = await dbService.registerCompany(userData.name, {
-          name: userData.name,
-          email: userData.email,
-          password: userData.password
-        });
-
-      // 2. Refresh local context and notify
-      setSuccessMsg(t('registrationSuccess'));
-      setView('login');
-      
-      // Optional: Automatic notifications can stay in backend register-company logic
+  const handleRegister = async (userData) => {
+    setAuthError(null);
+    try {
+      const result = await dbService.publicRegister(userData);
+      setSuccessMsg(t('registrationSuccessPending'));
+      handleViewChange('login');
     } catch (err) {
-      if (err.message.includes('user_exists')) {
-        setAuthError(t('errorUserExists'));
-      } else {
-        setAuthError(t('errorRegistration'));
-      }
+      setAuthError(err.message);
     }
   };
 
@@ -240,7 +227,13 @@ function App() {
       <Layout
         currentView={view}
         setView={handleViewChange}
-        onCreateTicket={() => handleViewChange('new')}
+        onCreateTicket={() => {
+          if ((currentUser?.status === 'active' || currentUser?.role === 'superadmin') && (currentUser?.companyId || currentUser?.role === 'superadmin')) {
+            handleViewChange('new');
+          } else {
+            alert(t('accountPendingOrNoCompany'));
+          }
+        }}
         language={language}
         setLanguage={setLanguage}
         theme={theme}

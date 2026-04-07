@@ -1,10 +1,10 @@
 {
   "smtpConfig": {
-    "smtpHost": "",
-    "smtpPort": "567",
-    "smtpUser": "",
-    "smtpPass": "",
-    "smtpSecure": false
+    "smtpHost": "mail.montes.digital",
+    "smtpPort": "465",
+    "smtpUser": "reporticket@montes.digital",
+    "smtpPass": "ba9c929a5c6abd150d11a078f1dabf05:dd1ea24f6931e2105e6ebbc22308a066",
+    "smtpSecure": true
   },
   "supabaseConfig": {
     "smtpUser": "abraham.montes@gmail.com",

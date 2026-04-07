@@ -9,7 +9,6 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [newCompanyName, setNewCompanyName] = useState('');
-  const [newCompanyDbName, setNewCompanyDbName] = useState('');
   const [newAdminName, setNewAdminName] = useState('');
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
@@ -21,7 +20,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
   const [editCompanyName, setEditCompanyName] = useState('');
 
   const [editingUserId, setEditingUserId] = useState(null);
-  const [editUserForm, setEditUserForm] = useState({ name: '', role: '' });
+  const [editUserForm, setEditUserForm] = useState({ name: '', role: '', status: '', companyId: '' });
   const [permissionsModalUser, setPermissionsModalUser] = useState(null);
 
   const [settingsForm, setSettingsForm] = useState({
@@ -69,16 +68,14 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
       return;
     }
     try {
-      await dbService.registerCompany(newCompanyName.trim(), newCompanyDbName.trim(), {
+      await dbService.registerCompany(newCompanyName.trim(), {
         name: newAdminName.trim(),
         email: newAdminEmail.trim(),
         password: newAdminPassword.trim()
       });
       const updated = await dbService.getCompanies();
       setCompanies(updated);
-      await fetchUsers();
       setNewCompanyName('');
-      setNewCompanyDbName('');
       setNewAdminName('');
       setNewAdminEmail('');
       setNewAdminPassword('');
@@ -135,7 +132,14 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
 
   const handlePersistSmtp = async () => {
     try {
-      const result = await dbService.updateSystemSettings({ smtpConfig: settingsForm });
+      const smtpData = {
+        smtpHost: settingsForm.smtpHost,
+        smtpPort: settingsForm.smtpPort,
+        smtpUser: settingsForm.smtpUser,
+        smtpPass: settingsForm.smtpPass,
+        smtpSecure: settingsForm.smtpSecure
+      };
+      const result = await dbService.updateSystemSettings({ smtpConfig: smtpData });
       if (result.success) {
         alert(t('changesSaved'));
       } else {
@@ -224,7 +228,12 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
 
   const handleEditUserStart = (u) => {
     setEditingUserId(u.id);
-    setEditUserForm({ name: u.name, role: u.role, companyId: u.companyId || '' });
+    setEditUserForm({ 
+      name: u.name, 
+      role: u.role, 
+      status: u.status || 'pending', 
+      companyId: u.companyId || '' 
+    });
   };
 
   const handleEditUserSave = async (userId) => {
@@ -232,10 +241,11 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
       await dbService.updateUserProfile(userId, { 
         name: editUserForm.name.trim(), 
         role: editUserForm.role,
+        status: editUserForm.status,
         companyId: editUserForm.companyId
       });
       const data = await dbService.getUsers();
-      setUsers(data.map(u => ({ ...u, companyId: u.company_id })));
+      setUsers(data);
     }
     setEditingUserId(null);
   };
@@ -409,7 +419,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
             </table>
           </div>
         </div>
-      ) : activeTab === 'settings' ? (
+      ) : activeTab === 'settings' && user?.role === 'superadmin' ? (
         <div style={{ animation: 'fadeIn 0.5s ease-out', maxWidth: '1200px', margin: '0 auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem' }}>
             {/* SMTP Configuration Card */}
@@ -444,14 +454,33 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                   <input type="text" value={settingsForm.smtpHost} onChange={e => setSettingsForm({...settingsForm, smtpHost: e.target.value})} placeholder="smtp.ejemplo.com" required className="modern-input" />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label className="input-label">{t('smtpUser')}</label>
                     <input type="text" value={settingsForm.smtpUser} onChange={e => setSettingsForm({...settingsForm, smtpUser: e.target.value})} placeholder="user@domain.com" required className="modern-input" />
                   </div>
                   <div>
-                    <label className="input-label">{t('smtpPort')}</label>
-                    <input type="text" value={settingsForm.smtpPort} onChange={e => setSettingsForm({...settingsForm, smtpPort: e.target.value})} placeholder="587" className="modern-input" />
+                    <label className="input-label">{t('smtpPort') || 'Puerto'}</label>
+                    <input type="text" value={settingsForm.smtpPort} onChange={(e) => {
+                      const port = e.target.value;
+                      setSettingsForm({
+                        ...settingsForm, 
+                        smtpPort: port,
+                        smtpSecure: port === '465' ? true : settingsForm.smtpSecure
+                      });
+                    }} placeholder="465 / 587" className="modern-input" />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label className="input-label">SSL/TLS</label>
+                    <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={settingsForm.smtpSecure} 
+                        onChange={e => setSettingsForm({...settingsForm, smtpSecure: e.target.checked})}
+                        style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                      />
+                      <span style={{ marginLeft: '0.5rem', fontSize: '0.85rem' }}>{settingsForm.smtpSecure ? 'Secure' : 'Standard'}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -560,7 +589,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                       style={{ paddingRight: '2.5rem' }}
                     />
                     <button type="button" onClick={() => setShowSupabaseKey(!showSupabaseKey)} className="input-icon-btn">
-                      {showSupabaseKey ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
+                      {showSupabaseKey ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
                     </button>
                   </div>
                 </div>
@@ -588,7 +617,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
                   {t('createCompany')}
                 </h2>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('manageInfrastructure') || 'Gestión de infraestructura y bases de datos'}</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('identifierOnly') || 'Crea un identificador único para segmentar tickets y usuarios'}</p>
               </div>
               <form onSubmit={handleCreateCompany} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div className="form-group">
@@ -601,17 +630,6 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                     onChange={(e) => setNewCompanyName(e.target.value)}
                     required
                   />
-                </div>
-                <div className="form-group">
-                   <label className="input-label">{t('databaseName') || 'Nombre de Identificación (BD)'}</label>
-                   <input 
-                     type="text" 
-                     className="modern-input"
-                     placeholder="ej: cliente_pro" 
-                     value={newCompanyDbName}
-                     onChange={(e) => setNewCompanyDbName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                     required
-                   />
                 </div>
                 <div className="form-group">
                   <label className="input-label">{t('administrator')}</label>
@@ -706,17 +724,53 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                             <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'monospace', opacity: 0.8 }}>ID: {c.id}</span>
                           </div>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={() => handleToggleCompanyStatus(c.id, c.status)} className="input-icon-btn" style={{ position: 'static', color: c.status === 'suspended' ? 'var(--text-muted)' : '#10b981', padding: '0.5rem' }} title={c.status === 'suspended' ? t('activate') : t('suspend')}>
+                            <button 
+                              onClick={() => handleToggleCompanyStatus(c.id, c.status)} 
+                              className="input-icon-btn" 
+                              style={{ 
+                                position: 'static', 
+                                color: c.status === 'suspended' ? 'var(--text-muted)' : '#10b981', 
+                                padding: '0.5rem',
+                                opacity: c.name === 'ReporTicket Demo' ? 0.3 : 1,
+                                cursor: c.name === 'ReporTicket Demo' ? 'not-allowed' : 'pointer'
+                              }} 
+                              title={c.status === 'suspended' ? t('activate') : t('suspend')}
+                              disabled={c.name === 'ReporTicket Demo'}
+                            >
                               {c.status === 'suspended' ? (
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                               ) : (
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
                               )}
                             </button>
-                            <button onClick={() => handleEditCompanyStart(c)} className="input-icon-btn" style={{ position: 'static', color: 'var(--primary)', padding: '0.5rem' }} title={t('edit')}>
+                            <button 
+                              onClick={() => handleEditCompanyStart(c)} 
+                              className="input-icon-btn" 
+                              style={{ 
+                                position: 'static', 
+                                color: 'var(--primary)', 
+                                padding: '0.5rem',
+                                opacity: c.name === 'ReporTicket Demo' ? 0.3 : 1,
+                                cursor: c.name === 'ReporTicket Demo' ? 'not-allowed' : 'pointer'
+                              }} 
+                              title={t('edit')}
+                              disabled={c.name === 'ReporTicket Demo'}
+                            >
                               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                             </button>
-                            <button onClick={() => handleDeleteCompany(c.id)} className="input-icon-btn" style={{ position: 'static', color: '#ef4444', padding: '0.5rem' }} title={t('delete')}>
+                            <button 
+                              onClick={() => handleDeleteCompany(c.id)} 
+                              className="input-icon-btn" 
+                              style={{ 
+                                position: 'static', 
+                                color: '#ef4444', 
+                                padding: '0.5rem',
+                                opacity: (c.name === 'ReporTicket Demo' && user.role !== 'superadmin') ? 0 : 1,
+                                visibility: (c.name === 'ReporTicket Demo' && user.role !== 'superadmin') ? 'hidden' : 'visible'
+                              }} 
+                              title={t('delete')}
+                              disabled={c.name === 'ReporTicket Demo' && user.role !== 'superadmin'}
+                            >
                               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                             </button>
                           </div>
@@ -747,6 +801,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('user')}</th>
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('emailAddress')}</th>
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('role')}</th>
+                    <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('status')}</th>
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('company')}</th>
                     <th style={{ padding: '1.25rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'right' }}>{t('actions')}</th>
                   </tr>
@@ -770,6 +825,13 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                             </select>
                           </td>
                           <td style={{ padding: '1rem 1.5rem' }}>
+                            <select className="modern-input" value={editUserForm.status} onChange={e => setEditUserForm(f => ({...f, status: e.target.value}))} style={{ padding: '0.5rem' }}>
+                              <option value="pending">{t('pending')}</option>
+                              <option value="active">{t('active')}</option>
+                              <option value="suspended">{t('suspended')}</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: '1rem 1.5rem' }}>
                             <select className="modern-input" value={editUserForm.companyId || ''} onChange={(e) => setEditUserForm(f => ({...f, companyId: e.target.value}))} style={{ padding: '0.5rem' }}>
                               <option value="">-- {t('unassigned')} --</option>
                               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -790,6 +852,16 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                           <td style={{ padding: '1.25rem 1.5rem' }}>
                               <span className={`badge badge-${u.role === 'superadmin' ? 'closed' : (u.role === 'admin' ? 'old' : (u.role === 'supervisor' ? 'inprogress' : 'open'))}`} style={{ fontSize: '0.7rem', padding: '0.25rem 0.75rem', borderRadius: '2rem', fontWeight: '700', textTransform: 'uppercase' }}>
                                 {t(`roles.${u.role}`)}
+                              </span>
+                          </td>
+                          <td style={{ padding: '1.25rem 1.5rem' }}>
+                              <span style={{ 
+                                fontSize: '0.7rem', padding: '0.25rem 0.75rem', borderRadius: '2rem', fontWeight: '700', textTransform: 'uppercase',
+                                background: u.status === 'pending' ? 'rgba(251, 191, 36, 0.15)' : u.status === 'suspended' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                color: u.status === 'pending' ? '#fbbf24' : u.status === 'suspended' ? '#ef4444' : '#10b981',
+                                border: '1px solid currentColor'
+                              }}>
+                                {t(u.status || 'active')}
                               </span>
                           </td>
                           <td style={{ padding: '1.25rem 1.5rem' }}>

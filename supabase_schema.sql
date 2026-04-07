@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS public.users (
     role TEXT NOT NULL DEFAULT 'customer', -- 'admin', 'superadmin', 'customer', 'agent'
     permissions JSONB DEFAULT '{}'::jsonb,
     company_id TEXT REFERENCES public.companies(id),
+    status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'active', 'suspended'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS public.tickets (
     department TEXT, -- 'technical', 'billing', 'general'
     user_id TEXT NOT NULL REFERENCES public.users(id), -- Requester
     agent_id TEXT REFERENCES public.users(id), -- Assigned Agent
+    company_id TEXT REFERENCES public.companies(id), -- Company Identifier
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

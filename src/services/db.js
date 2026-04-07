@@ -15,6 +15,17 @@ const getHeaders = () => {
 
 export const dbService = {
   // Authentication
+  publicRegister: async (userData) => {
+    const response = await fetch(`${API_URL}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
+  },
+
   login: async (email, password) => {
     const response = await fetch(`${API_URL}/login`, {
       method: 'POST',
@@ -83,11 +94,11 @@ export const dbService = {
     return data.companies || [];
   },
 
-  registerCompany: async (name, dbName, adminUser) => {
+  registerCompany: async (name, adminUser) => {
     const response = await fetch(`${API_URL}/register-company`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, dbName, adminUser })
+      body: JSON.stringify({ name, adminUser })
     });
     const data = await response.json();
     if (!data.success) throw new Error(data.message);
