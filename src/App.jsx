@@ -14,43 +14,37 @@ import { translations } from './translations';
 import { dbService } from './services/db';
 
 function App() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [view, setView] = useState('landing');
-  const [language, setLanguage] = useState('es');
-  const [theme, setTheme] = useState('dark');
-  const [allTickets, setAllTickets] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
-  const [selectedTicket, setSelectedTicket] = useState(null);
-  const [userRole, setUserRole] = useState('customer');
-  const [isLoaded, setIsLoaded] = useState(false);
-
-
-  // Initialize session
-  useEffect(() => {
-    // Check for password reset token in URL
+  const [currentUser, setCurrentUser] = useState(() => dbService.getSession());
+  const [view, setView] = useState(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('token')) {
-      setView('resetPassword');
-      setIsLoaded(true);
-      return;
+      return 'resetPassword';
     }
-
     const session = dbService.getSession();
     if (session) {
-      setCurrentUser(session);
-      setUserRole(session.role);
-      setLanguage(session.preferences?.language || 'es');
-      setTheme(session.preferences?.theme || 'dark');
-      setView('dashboard');
+      return 'dashboard';
     }
-    setIsLoaded(true);
-  }, []);
+    return 'landing';
+  });
+  const [language, setLanguage] = useState(() => {
+    const session = dbService.getSession();
+    return session?.preferences?.language || 'es';
+  });
+  const [theme, setTheme] = useState(() => {
+    const session = dbService.getSession();
+    return session?.preferences?.theme || 'dark';
+  });
+  const [allTickets, setAllTickets] = useState([]);
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [userRole, setUserRole] = useState(() => {
+    const session = dbService.getSession();
+    return session ? session.role : 'customer';
+  });
 
   // Fetch tickets when user changes
   useEffect(() => {
     if (currentUser) {
       dbService.getTickets().then(setAllTickets).catch(console.error);
-      dbService.getUsers().then(setAllUsers).catch(console.error);
       
 
     }
@@ -74,23 +68,15 @@ function App() {
      setView(newView);
    };
 
-  const [stats, setStats] = useState({
-    open: 0,
-    overdue: 0,
-    unassigned: 0,
-    closed: 0
-  });
-
   // Calculate real stats from tickets
-  useEffect(() => {
+  const stats = React.useMemo(() => {
     const currentTickets = visibleTickets || [];
-    const s = {
+    return {
       open: currentTickets.filter(t => t.status !== 'closed').length,
       overdue: currentTickets.filter(t => t.status === 'old').length,
       unassigned: currentTickets.filter(t => !t.agentId).length,
       closed: currentTickets.filter(t => t.status === 'closed').length
     };
-    setStats(s);
   }, [visibleTickets]);
 
   useEffect(() => {
@@ -125,7 +111,7 @@ function App() {
   const handleRegister = async (userData) => {
     setAuthError(null);
     try {
-      const result = await dbService.publicRegister(userData);
+      await dbService.publicRegister(userData);
       setSuccessMsg(t('registrationSuccessPending'));
       handleViewChange('login');
     } catch (err) {

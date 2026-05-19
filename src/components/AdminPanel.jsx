@@ -13,15 +13,17 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [showNewAdminPass, setShowNewAdminPass] = useState(false);
-  const [companySuccessMessage, setCompanySuccessMessage] = useState('');
-  const [systemInfo, setSystemInfo] = useState({ dbHost: 'localhost', version: '1.2.0' });
-
   const [editingCompanyId, setEditingCompanyId] = useState(null);
   const [editCompanyName, setEditCompanyName] = useState('');
 
   const [editingUserId, setEditingUserId] = useState(null);
   const [editUserForm, setEditUserForm] = useState({ name: '', role: '', status: '', companyId: '' });
   const [permissionsModalUser, setPermissionsModalUser] = useState(null);
+
+  const [companyPendingDelete, setCompanyPendingDelete] = useState(null);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [deleteConfirmError, setDeleteConfirmError] = useState('');
+  const [isSendingCode, setIsSendingCode] = useState(false);
 
   const [settingsForm, setSettingsForm] = useState({
     smtpHost: '',
@@ -37,7 +39,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
   const [dbTestStatus, setDbTestStatus] = useState(null);
   const [testErrorMsg, setTestErrorMsg] = useState(null);
   const [dbErrorMsg, setDbErrorMsg] = useState(null);
-  const [allTickets, setAllTickets] = useState([]);
+  
   const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [showSupabaseKey, setShowSupabaseKey] = useState(false);
   const [testEmail, setTestEmail] = useState('');
@@ -48,17 +50,14 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
     if (user?.role === 'superadmin') {
       dbService.getUsers().then(setUsers);
       dbService.getCompanies().then(setCompanies);
-      dbService.getSystemInfo().then(info => {
-        setSystemInfo(info);
-
-      });
+      
       // Load System Settings (SMTP & Supabase)
       dbService.getSystemSettings().then(settings => {
-        setSettingsForm({
-          ...settingsForm,
+        setSettingsForm(prev => ({
+          ...prev,
           ...(settings.smtpConfig || {}),
           ...(settings.supabaseConfig || {})
-        });
+        }));
       });
 
     }
@@ -66,24 +65,16 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
 
   const handleCreateCompany = async (e) => {
     e.preventDefault();
-    if (!newCompanyName.trim() || !newAdminName.trim() || !newAdminEmail.trim() || !newAdminPassword.trim()) {
+    if (!newCompanyName.trim()) {
       alert(t('fillAllFields') || 'Por favor completa todos los campos');
       return;
     }
     try {
-      await dbService.registerCompany(newCompanyName.trim(), {
-        name: newAdminName.trim(),
-        email: newAdminEmail.trim(),
-        password: newAdminPassword.trim()
-      });
+      await dbService.registerCompany(newCompanyName.trim());
       const updated = await dbService.getCompanies();
       setCompanies(updated);
       setNewCompanyName('');
-      setNewAdminName('');
-      setNewAdminEmail('');
-      setNewAdminPassword('');
-      setCompanySuccessMessage(t('companyCreatedMsg'));
-      setTimeout(() => setCompanySuccessMessage(''), 3000);
+      alert(t('companyCreatedMsg') || 'Empresa creada con éxito');
     } catch (err) {
       console.error('Error creating company:', err);
       alert(err.message);
@@ -128,6 +119,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
         setTimeout(() => setTestConnectionStatus(null), 10000);
       }
     } catch (error) {
+      console.error('SMTP test error:', error);
       setTestConnectionStatus('error');
       setTestErrorMsg('systemError');
       setTimeout(() => setTestConnectionStatus(null), 10000);
@@ -150,6 +142,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
         alert('Error: ' + (t(result.message) || result.message));
       }
     } catch (err) {
+      console.error('Error saving SMTP settings:', err);
       alert(t('errorSavingSmtp'));
     }
   };
@@ -170,6 +163,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
         setTimeout(() => setDbTestStatus(null), 10000);
       }
     } catch (error) {
+      console.error('Supabase test connection error:', error);
       setDbTestStatus('error');
       setDbErrorMsg('systemError');
       setTimeout(() => setDbTestStatus(null), 10000);
@@ -178,13 +172,19 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
 
   const handlePersistSupabase = async () => {
     try {
-      const result = await dbService.updateSystemSettings({ supabaseConfig: settingsForm });
+      const supabaseData = {
+        supabaseUrl: settingsForm.supabaseUrl,
+        supabaseKey: settingsForm.supabaseKey,
+        supabaseStatus: settingsForm.supabaseStatus
+      };
+      const result = await dbService.updateSystemSettings({ supabaseConfig: supabaseData });
       if (result.success) {
         alert(t('databaseConfigSaved'));
       } else {
         alert('Error: ' + (t(result.message) || result.message));
       }
     } catch (err) {
+      console.error('Error saving Supabase settings:', err);
       alert(t('errorSavingSupabase'));
     }
   };
@@ -209,11 +209,45 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
 
   const handleDeleteCompany = async (companyId) => {
     if (window.confirm(t('confirmDeleteCompany'))) {
-      await dbService.deleteCompany(companyId);
-      const updatedCompanies = await dbService.getCompanies();
-      const updatedUsers = await dbService.getUsers();
-      setCompanies(updatedCompanies);
-      setUsers(updatedUsers);
+      setIsSendingCode(true);
+      try {
+        const res = await dbService.requestCompanyDelete(companyId);
+        if (res && res.success) {
+          setCompanyPendingDelete(companyId);
+          setVerificationCode('');
+          setDeleteConfirmError('');
+          alert(t('codeSentSuccess') || 'Se ha enviado un código de confirmación a su correo.');
+        } else {
+          alert(res?.message || 'Error al solicitar el código de eliminación');
+        }
+      } catch (err) {
+        console.error('Error requesting company delete code:', err);
+        alert('Error al solicitar el código de eliminación');
+      } finally {
+        setIsSendingCode(false);
+      }
+    }
+  };
+
+  const handleConfirmDeleteCompany = async () => {
+    if (!verificationCode.trim()) return;
+    try {
+      const res = await dbService.deleteCompany(companyPendingDelete, verificationCode.trim());
+      if (res && res.success) {
+        setCompanyPendingDelete(null);
+        setVerificationCode('');
+        setDeleteConfirmError('');
+        const updatedCompanies = await dbService.getCompanies();
+        const updatedUsers = await dbService.getUsers();
+        setCompanies(updatedCompanies);
+        setUsers(updatedUsers);
+      } else {
+        const errMsg = res?.message ? t(res.message) || res.message : 'Código inválido o error al eliminar la empresa';
+        setDeleteConfirmError(errMsg);
+      }
+    } catch (err) {
+      console.error('Error confirming company deletion:', err);
+      setDeleteConfirmError('Error al confirmar la eliminación');
     }
   };
 
@@ -268,7 +302,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
 
   const handleDeleteTicket = async (e, ticketId) => {
     e.stopPropagation();
-    if (window.confirm(t('confirmDeleteTicket') || '¿Estás seguro de que deseas eliminar este ticket permanentemente?')) {
+    if (window.confirm(t('confirmDeleteTicket'))) {
       try {
         const result = await dbService.deleteTicket(ticketId);
         if (result.success) {
@@ -279,27 +313,9 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
           alert('Error: ' + result.message);
         }
       } catch (err) {
-        alert('Error deleting ticket');
+        console.error('Error deleting ticket:', err);
+        alert(t('errorDeletingTicket'));
       }
-    }
-  };
-
-   const handlePurgeSystem = async () => {
-    const confirm1 = window.confirm(t('confirmPurge1') || '¡ADVERTENCIA! Esta acción ELIMINARÁ TODOS los tickets y notas del sistema. ¿Estás seguro?');
-    if (!confirm1) return;
-    
-    const confirm2 = window.confirm(t('confirmPurge2') || '¿REALMENTE deseas borrar TODO? Esta acción no se puede deshacer.');
-    if (!confirm2) return;
-
-    try {
-      const result = await dbService.purgeTickets();
-      if (result.success) {
-        alert(t('purgeSuccess'));
-      } else {
-        alert(t('error') + ': ' + (t(result.message) || result.message));
-      }
-    } catch (error) {
-      alert(t('errorPurging'));
     }
   };
 
@@ -493,7 +509,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                         onChange={e => setSettingsForm({...settingsForm, smtpSecure: e.target.checked})}
                         style={{ width: '20px', height: '20px', cursor: 'pointer' }}
                       />
-                      <span style={{ marginLeft: '0.5rem', fontSize: '0.85rem' }}>{settingsForm.smtpSecure ? 'Secure' : 'Standard'}</span>
+                      <span style={{ marginLeft: '0.5rem', fontSize: '0.85rem' }}>{settingsForm.smtpSecure ? t('secureConnection') : t('standardConnection')}</span>
                     </div>
                   </div>
                 </div>
@@ -633,88 +649,24 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(400px, 1fr) 2.5fr', gap: '2rem', alignItems: 'start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div className="glass-panel" style={{ padding: '2rem' }}>
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h2 style={{ fontSize: '1.25rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
-                  {t('createCompany')}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h2 style={{ fontSize: '1.25rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--primary)', fontWeight: '700' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                  {t('companies')}
                 </h2>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('identifierOnly')}</p>
               </div>
-              <form onSubmit={handleCreateCompany} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div className="form-group">
-                  <label className="input-label">{t('companyName') || 'Nombre de la Empresa'}</label>
-                  <input 
-                    type="text" 
-                    className="modern-input"
-                    placeholder={t('enterCompanyPlaceholder') || 'Nombre de la empresa'} 
-                    value={newCompanyName}
-                    onChange={(e) => setNewCompanyName(e.target.value)}
-                    required
-                  />
+              
+              <form onSubmit={handleCreateCompany} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-hover)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid var(--border-color)', marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '0.9rem', margin: 0, color: 'var(--text-main)', fontWeight: '600' }}>{t('createCompany') || 'Crear Nueva Empresa'}</h3>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input type="text" value={newCompanyName} onChange={e => setNewCompanyName(e.target.value)} placeholder={t('companyNamePlaceholder') || 'Nombre de la Empresa'} required className="modern-input" style={{ flex: 1 }} />
+                  <button type="submit" className="btn-primary" style={{ padding: '0.75rem 1.5rem', whiteSpace: 'nowrap' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.5rem' }}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    {t('create')}
+                  </button>
                 </div>
-                <div className="form-group">
-                  <label className="input-label">{t('administrator')}</label>
-                  <input 
-                    type="text" 
-                    className="modern-input"
-                    placeholder={t('enterNamePlaceholder') || 'Nombre del administrador'} 
-                    value={newAdminName}
-                    onChange={(e) => setNewAdminName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="input-label">{t('emailAddress')}</label>
-                  <input 
-                    type="email" 
-                    className="modern-input"
-                    placeholder={t('enterEmailPlaceholder') || 'correo@ejemplo.com'} 
-                    value={newAdminEmail}
-                    onChange={(e) => setNewAdminEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="input-label">{t('password')}</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <div style={{ flex: 1, position: 'relative' }}>
-                      <input 
-                        type={showNewAdminPass ? "text" : "password"} 
-                        className="modern-input"
-                        placeholder="********" 
-                        value={newAdminPassword}
-                        onChange={(e) => setNewAdminPassword(e.target.value)}
-                        required
-                        style={{ paddingRight: '2.5rem' }}
-                      />
-                      <button 
-                        type="button"
-                        className="input-icon-btn"
-                        onClick={() => setShowNewAdminPass(!showNewAdminPass)}
-                        style={{ right: '0.5rem' }}
-                      >
-                        {showNewAdminPass ? (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                        ) : (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                        )}
-                      </button>
-                    </div>
-                    <button 
-                      type="button" 
-                      className="btn-outline" 
-                      onClick={generateRandomPassword}
-                      style={{ padding: '0 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title={t('generate')}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3y-2.5z"></path></svg>
-                    </button>
-                  </div>
-                </div>
-                <button type="submit" className="btn-primary" style={{ padding: '1rem', marginTop: '0.5rem', fontWeight: '700', fontSize: '0.95rem' }}>
-                  {t('createCompany')}
-                </button>
               </form>
+
             {companies.length > 0 && (
               <div style={{ marginTop: '1.5rem' }}>
                 <h3 style={{ fontSize: '0.9rem', marginBottom: '1.25rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: '700' }}>{t('registeredCompanies')}</h3>
@@ -850,7 +802,7 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                             </select>
                           </td>
                           <td style={{ padding: '1rem 1.5rem' }}>
-                            <select className="modern-input" value={editUserForm.status} onChange={e => setEditUserForm(f => ({...f, status: e.target.value}))} style={{ padding: '0.5rem' }}>
+                            <select className="modern-input" value={editUserForm.status || 'active'} onChange={(e) => setEditUserForm(f => ({...f, status: e.target.value}))} style={{ padding: '0.5rem' }}>
                               <option value="pending">{t('pending')}</option>
                               <option value="active">{t('active')}</option>
                               <option value="suspended">{t('suspended')}</option>
@@ -861,6 +813,11 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                               <option value="">-- {t('unassigned')} --</option>
                               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
+                            {u.requestedCompany && (
+                              <div style={{ fontSize: '0.75rem', marginTop: '0.25rem', color: 'var(--primary)', fontWeight: '700' }}>
+                                {t('requestedCompany')}: <span style={{ textDecoration: 'underline' }}>{u.requestedCompany}</span>
+                              </div>
+                            )}
                           </td>
                         </>
                       ) : (
@@ -894,8 +851,17 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
                             {u.role === 'superadmin' ? (
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', background: 'var(--bg-hover)', padding: '0.25rem 0.75rem', borderRadius: '1rem', border: '1px solid var(--border-color)' }}>{t('allCompanies')}</span>
                             ) : (
-                              <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>
-                                {companies.find(c => String(c.id) === String(u.companyId))?.name || <em style={{ opacity: 0.5 }}>{t('unassigned')}</em>}
+                              <span style={{ fontSize: '0.9rem', fontWeight: '500', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                {companies.find(c => String(c.id) === String(u.companyId))?.name || (
+                                  <>
+                                    <em style={{ opacity: 0.5 }}>{t('unassigned')}</em>
+                                    {u.requestedCompany && (
+                                      <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '600' }}>
+                                        ({t('requestedCompany')}: {u.requestedCompany})
+                                      </span>
+                                    )}
+                                  </>
+                                )}
                               </span>
                             )}
                           </td>
@@ -962,6 +928,46 @@ const AdminPanel = ({ t, tickets, onSelectTicket, user, activeTab = 'tickets' })
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
               <button className="btn-outline" onClick={() => setPermissionsModalUser(null)} style={{ padding: '0.75rem 1.5rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '0.5rem', cursor: 'pointer' }}>{t('cancel')}</button>
               <button className="btn-primary" onClick={handleSavePermissions} style={{ padding: '0.75rem 1.5rem', borderRadius: '0.5rem', cursor: 'pointer' }}>{t('savePermissions')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {companyPendingDelete && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '2rem' }}>
+            <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', color: '#ef4444' }}>{t('deleteCompany') || 'Eliminar Empresa'}</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>{t('deleteCompanyEmailSentNote') || 'Se ha enviado un código de confirmación de 6 dígitos a su correo electrónico. Ingréselo a continuación para confirmar la eliminación.'}</p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '2rem' }}>
+              <label style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{t('verificationCode') || 'Código de Verificación'}</label>
+              <input 
+                type="text" 
+                maxLength="6"
+                placeholder="123456" 
+                value={verificationCode}
+                onChange={e => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                style={{
+                  padding: '0.75rem',
+                  fontSize: '1.25rem',
+                  textAlign: 'center',
+                  letterSpacing: '0.25rem',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '0.5rem',
+                  color: 'var(--text-main)',
+                  outline: 'none',
+                  transition: 'border-color 0.2s'
+                }}
+              />
+              {deleteConfirmError && (
+                <span style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.25rem' }}>{deleteConfirmError}</span>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button className="btn-outline" onClick={() => setCompanyPendingDelete(null)} style={{ padding: '0.75rem 1.5rem', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-main)', borderRadius: '0.5rem', cursor: 'pointer' }}>{t('cancel')}</button>
+              <button className="btn-primary" onClick={handleConfirmDeleteCompany} disabled={verificationCode.length !== 6} style={{ padding: '0.75rem 1.5rem', borderRadius: '0.5rem', cursor: 'pointer', background: verificationCode.length === 6 ? '#ef4444' : 'var(--border-color)', border: 'none', color: '#fff', opacity: verificationCode.length === 6 ? 1 : 0.5 }}>{t('confirm') || 'Confirmar'}</button>
             </div>
           </div>
         </div>

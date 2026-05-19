@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS public.users (
     role TEXT NOT NULL DEFAULT 'customer', -- 'admin', 'superadmin', 'customer', 'agent'
     permissions JSONB DEFAULT '{}'::jsonb,
     company_id TEXT REFERENCES public.companies(id),
+    requested_company TEXT,
+    phone TEXT,
+    extension TEXT,
     status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'active', 'suspended'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

@@ -20,7 +20,7 @@ const Landing = ({ onGetStarted, onLogin, theme, setTheme, t, language, setLangu
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <button
             onClick={() => setLanguage(language === 'en' ? 'es' : 'en')}
-            title={language === 'en' ? 'Spanish' : 'English'}
+            title={language === 'en' ? 'Cambiar a Español' : 'Switch to English'}
             style={{
               background: 'none',
               border: '1px solid var(--border-color)',

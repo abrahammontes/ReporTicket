@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Logo from './Logo';
 
-const Layout = ({ children, currentView, setView, onCreateTicket, language, setLanguage, theme, setTheme, userRole, setUserRole, user, onLogout, t, dbHealth }) => {
+const Layout = ({ children, currentView, setView, onCreateTicket, language, setLanguage, theme, setTheme, userRole, user, onLogout, t }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   return (
@@ -62,6 +62,7 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
           <button 
             onClick={() => { setLanguage(language === 'en' ? 'es' : 'en'); setIsSidebarOpen(false); }}
+            title={language === 'en' ? 'Cambiar a Español' : 'Switch to English'}
             style={{ 
               width: '100%', 
               padding: '0.6rem', 
@@ -254,6 +255,50 @@ const Layout = ({ children, currentView, setView, onCreateTicket, language, setL
       </aside>
       
       <main className="main-content">
+        {!user?.phone && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(217, 119, 6, 0.1), rgba(245, 158, 11, 0.15))',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            borderRadius: '12px',
+            padding: '1rem 1.5rem',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+            color: 'var(--text-main)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.9rem' }}>
+              <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+              <p style={{ margin: 0, fontWeight: '500', lineHeight: '1.4' }}>
+                {t('whatsappRequiredAlert')}
+              </p>
+            </div>
+            <button 
+              onClick={() => setView('profile')}
+              style={{
+                background: 'linear-gradient(135deg, #d97706, #f59e0b)',
+                border: 'none',
+                color: 'white',
+                padding: '0.5rem 1rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '0.85rem',
+                whiteSpace: 'nowrap',
+                transition: 'transform 0.2s ease',
+                boxShadow: '0 2px 8px rgba(217, 119, 6, 0.3)'
+              }}
+              onMouseEnter={(e) => e.target.style.transform = 'scale(1.03)'}
+              onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+            >
+              {t('goToProfile')}
+            </button>
+          </div>
+        )}
+
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
           <div>
             <h1 style={{ fontSize: '1.875rem', marginBottom: '0.25rem' }}>

@@ -1,16 +1,11 @@
 import React from 'react';
 
-const Logo = ({ theme, size = 120 }) => {
+const Logo = ({ theme }) => {
   const isDark = theme === 'dark';
   
   // Exact colors from the user's image
-  const navy = '#0a1d37'; // Deeper navy
   const teal = '#18c1ca';
-  const subtextCol = isDark ? '#94a3b8' : '#7f8c8d'; // Slate grey for subtext
-  const white = '#ffffff';
-  
-  const iconColor = isDark ? white : navy;
-  const textColor = isDark ? white : '#0a1d37';
+  const textColor = isDark ? '#ffffff' : '#0a1d37';
 
   return (
     <div className="logo-container" style={{ 

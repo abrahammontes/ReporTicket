@@ -7,8 +7,6 @@
     "smtpSecure": true
   },
   "supabaseConfig": {
-    "smtpUser": "abraham.montes@gmail.com",
-    "smtpPass": "admin123",
     "supabaseUrl": "https://jdfmtzcppskjzmsjivzp.supabase.co",
     "supabaseKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkZm10emNwcHNranptc2ppdnpwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTUyODA4MywiZXhwIjoyMDkxMTA0MDgzfQ.lIvA-SagHhf_FH-Wcd8rLte_h2-RiS5sLO9Bk2vopeE",
     "supabaseStatus": "connected"

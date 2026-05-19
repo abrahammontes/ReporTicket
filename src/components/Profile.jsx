@@ -2,8 +2,34 @@ import React, { useState } from 'react';
 import { dbService } from '../services/db';
 
 const Profile = ({ user, t, onUpdate }) => {
+  // Parse prefix and phone from user.phone
+  let initialPrefix = '+52';
+  let initialPhone = '';
+  if (user?.phone) {
+    const parts = user.phone.split(' ');
+    if (parts.length > 1) {
+      initialPrefix = parts[0];
+      initialPhone = parts.slice(1).join(' ');
+    } else {
+      if (user.phone.startsWith('+')) {
+        const commonPrefixes = ['+506', '+507', '+502', '+503', '+593', '+52', '+34', '+57', '+54', '+56', '+51', '+58', '+1'];
+        const matched = commonPrefixes.find(p => user.phone.startsWith(p));
+        if (matched) {
+          initialPrefix = matched;
+          initialPhone = user.phone.substring(matched.length).trim();
+        } else {
+          initialPhone = user.phone;
+        }
+      } else {
+        initialPhone = user.phone;
+      }
+    }
+  }
+
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
+  const [countryPrefix, setCountryPrefix] = useState(initialPrefix);
+  const [phone, setPhone] = useState(initialPhone);
   const [photo, setPhoto] = useState(user?.photo || null);
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -21,10 +47,10 @@ const Profile = ({ user, t, onUpdate }) => {
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       } else {
-        setError(result.message || 'Error al guardar la foto');
+        setError(result.message || t('errorSavingPhoto') || 'Error al guardar la foto');
       }
     } catch (err) {
-      setError(err.message || 'Error al guardar la foto');
+      setError(err.message || t('errorSavingPhoto') || 'Error al guardar la foto');
     } finally {
       setIsLoading(false);
     }
@@ -34,7 +60,7 @@ const Profile = ({ user, t, onUpdate }) => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
-        setError('La imagen es demasiado grande (máximo 10MB)');
+        setError(t('imageTooLarge') || 'La imagen es demasiado grande (máximo 10MB)');
         return;
       }
       const img = new Image();
@@ -68,6 +94,16 @@ const Profile = ({ user, t, onUpdate }) => {
         if (name !== (user?.name || '')) updates.name = name;
         if (email !== (user?.email || '')) updates.email = email;
       }
+      
+      const formattedPhone = `${countryPrefix} ${phone.trim()}`;
+      if (phone.trim() !== '' && formattedPhone !== (user?.phone || '')) {
+        updates.phone = formattedPhone;
+      } else if (phone.trim() === '') {
+        setError(t('whatsappRequiredAlert') || 'El número de WhatsApp es obligatorio.');
+        setIsLoading(false);
+        return;
+      }
+
       if (Object.keys(updates).length === 0) {
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
@@ -82,10 +118,10 @@ const Profile = ({ user, t, onUpdate }) => {
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       } else {
-        setError(result.message || 'Error al guardar');
+        setError(result.message || t('errorSavingProfile') || 'Error al guardar');
       }
     } catch (err) {
-      setError(err.message || 'Error al guardar');
+      setError(err.message || t('errorSavingProfile') || 'Error al guardar');
     } finally {
       setIsLoading(false);
     }
@@ -162,6 +198,50 @@ const Profile = ({ user, t, onUpdate }) => {
             />
           </div>
 
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>WhatsApp / {t('phone')}</label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <select 
+                value={countryPrefix}
+                onChange={(e) => setCountryPrefix(e.target.value)}
+                style={{ 
+                  width: '120px', 
+                  padding: '0.65rem 0.5rem',
+                  fontSize: '0.85rem',
+                  background: 'var(--bg-subtle)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-main)',
+                  borderRadius: '0.375rem'
+                }}
+              >
+                <option value="+52">🇲🇽 +52</option>
+                <option value="+506">🇨🇷 +506</option>
+                <option value="+34">🇪🇸 +34</option>
+                <option value="+1">🇺🇸 +1</option>
+                <option value="+57">🇨🇴 +57</option>
+                <option value="+54">🇦🇷 +54</option>
+                <option value="+56">🇨🇱 +56</option>
+                <option value="+507">🇵🇦 +507</option>
+                <option value="+51">🇵🇪 +51</option>
+                <option value="+58">🇻🇪 +58</option>
+                <option value="+502">🇬🇹 +502</option>
+                <option value="+503">🇸🇻 +503</option>
+                <option value="+593">🇪🇨 +593</option>
+              </select>
+              <input 
+                type="tel" 
+                placeholder={t('enterPhonePlaceholder')} 
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+                style={{ flex: 1 }}
+              />
+            </div>
+            <p style={{ marginTop: '0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              * {t('whatsappRequiredAlert')}
+            </p>
+          </div>
+
           <div style={{ padding: '1rem', background: 'var(--bg-subtle)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{t('role')}</p>
             <p style={{ fontWeight: '600', textTransform: 'uppercase', color: 'var(--primary)' }}>{t(`roles.${user?.role || 'customer'}`)}</p>
@@ -169,7 +249,7 @@ const Profile = ({ user, t, onUpdate }) => {
 
           {user.role !== 'superadmin' && (
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center' }}>
-              * Solo el Super Administrador puede editar nombres y correos.
+              {t('onlySuperadminCanEdit') || '* Solo el Super Administrador puede editar nombres y correos.'}
             </p>
           )}
 

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 
 const API_URL = '/api';
 
-const VerifyEmail = ({ email, onVerified, onBack, t }) => {
+const VerifyEmail = ({ email, onVerified, onBack }) => {
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');

@@ -78,6 +78,7 @@ const Login = ({ onLogin, onRegister, onBack, theme, t, error, successMsg, langu
           <button
             type="button"
             onClick={() => setLanguage(language === 'en' ? 'es' : 'en')}
+            title={language === 'en' ? 'Cambiar a Español' : 'Switch to English'}
             style={{
               background: 'none',
               border: '1px solid var(--border-color)',

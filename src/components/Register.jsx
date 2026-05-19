@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { dbService } from '../services/db';
+import React, { useState } from 'react';
 
 const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage }) => {
   const [name, setName] = useState('');
@@ -9,6 +8,7 @@ const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage
   const [phone, setPhone] = useState('');
   const [countryPrefix, setCountryPrefix] = useState('+52');
   const [extension, setExtension] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [isRobotChecked, setIsRobotChecked] = useState(false);
   const [honeypot, setHoneypot] = useState('');
   const [localError, setLocalError] = useState(null);
@@ -42,7 +42,8 @@ const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage
            email, 
            password, 
            phone: `${countryPrefix} ${phone}`, 
-           extension
+           extension,
+           companyName
          }),
          timeoutPromise
        ]);
@@ -98,6 +99,7 @@ const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage
           <button
             type="button"
             onClick={() => setLanguage(language === 'en' ? 'es' : 'en')}
+            title={language === 'en' ? 'Cambiar a Español' : 'Switch to English'}
             style={{
               background: 'none',
               border: '1px solid var(--border-color)',
@@ -242,12 +244,25 @@ const Register = ({ onRegister, onLogin, onBack, t, error, language, setLanguage
               </div>
             </div>
             <div style={{ width: '100px' }}>
-              <label style={{ display: 'block', marginBottom: '0.65rem', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('extension')}</label>
+              <label style={{ display: 'block', marginBottom: '0.65rem', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('extension')} ({t('optional')})</label>
               <input 
                 type="text" 
                 placeholder={t('enterExtensionPlaceholder')} 
                 value={extension}
                 onChange={(e) => setExtension(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.65rem', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('companyName')}</label>
+              <input 
+                type="text" 
+                placeholder={t('companyNamePlaceholder') || "Nombre de tu empresa"} 
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                required
               />
             </div>
           </div>

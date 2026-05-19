@@ -256,7 +256,7 @@ const NewTicket = ({ onCancel, onSubmit, t, user }) => {
                cursor: submitting ? 'not-allowed' : 'pointer'
              }}
            >
-             {submitting ? 'Guardando...' : t('initializeTicket')}
+             {submitting ? t('saving') : t('initializeTicket')}
            </button>
          </div>
 

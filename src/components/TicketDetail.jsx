@@ -140,7 +140,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
 
      try {
        if (selectedFiles.length > 0) {
-         setSaveMessage('Subiendo archivos...');
+         setSaveMessage(t('uploadingFiles'));
          const uploadedFiles = [];
          
          for (const item of selectedFiles) {
@@ -169,7 +169,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
        if (typeof notes === 'string') {
          try {
            notes = JSON.parse(notes);
-         } catch (e) {
+         } catch {
            notes = [];
          }
        }
@@ -711,7 +711,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                   <input
                     type="number"
                     value={captchaInput}
-                    onChange={setCaptchaInput}
+                    onChange={(e) => setCaptchaInput(e.target.value)}
                     style={{ width: '80px', textAlign: 'center', fontSize: '1.1rem' }}
                     placeholder="?"
                   />

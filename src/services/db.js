@@ -94,11 +94,11 @@ export const dbService = {
     return data.companies || [];
   },
 
-  registerCompany: async (name, adminUser) => {
+  registerCompany: async (name) => {
     const response = await fetch(`${API_URL}/register-company`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, adminUser })
+      body: JSON.stringify({ name })
     });
     const data = await response.json();
     if (!data.success) throw new Error(data.message);
@@ -192,10 +192,19 @@ export const dbService = {
     return await response.json();
   },
 
-  deleteCompany: async (companyId) => {
+  requestCompanyDelete: async (companyId) => {
+    const response = await fetch(`${API_URL}/companies/${companyId}/request-delete`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    return await response.json();
+  },
+
+  deleteCompany: async (companyId, code) => {
     const response = await fetch(`${API_URL}/companies/${companyId}`, {
       method: 'DELETE',
-      headers: getHeaders()
+      headers: getHeaders(),
+      body: JSON.stringify({ code })
     });
     return await response.json();
   },
