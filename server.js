@@ -601,7 +601,11 @@ app.get('/api/tickets', async (req, res) => {
     if (!supabase) return res.json({ success: true, tickets: [] });
 
     try {
-        let query = supabase.from('tickets').select('*, users!user_id(name), agents:users!agent_id(name), ticket_notes(*)');
+        let selectString = '*, users!user_id(name), agents:users!agent_id(name), ticket_notes(*)';
+        if ((userRole === 'admin' || userRole === 'agent') && companyId && companyId !== 'master') {
+            selectString = '*, users!user_id!inner(name, company_id), agents:users!agent_id(name), ticket_notes(*)';
+        }
+        let query = supabase.from('tickets').select(selectString);
 
         // Access Control Logic
         if (userRole === 'customer') {
@@ -610,7 +614,7 @@ app.get('/api/tickets', async (req, res) => {
         } else if (userRole === 'admin' || userRole === 'agent') {
             // Company admins/agents see tickets for their specific company
             if (companyId && companyId !== 'master') {
-                query = query.eq('company_id', companyId);
+                query = query.eq('users.company_id', companyId);
             }
         }
         // Superadmins see all tickets (no filter)
@@ -777,9 +781,12 @@ app.post('/api/tickets', async (req, res) => {
 
         const ticketData = toSnake({
             ...otherData,
-            status: 'open',
-            companyId: companyId && companyId !== 'master' ? companyId : (otherData.companyId || null)
+            title: otherData.subject || 'Sin Asunto',
+            status: 'open'
         });
+        delete ticketData.subject; // Remove subject because Supabase uses title
+        delete ticketData.company_id; // Remove company_id because it doesn't exist in Supabase tickets table
+        console.log("ticketData to insert:", ticketData);
 
         const { data: insertedTicket, error } = await supabase.from('tickets').insert([ticketData]).select();
         if (error) throw error;
@@ -1276,7 +1283,7 @@ app.delete('/api/companies/:id', async (req, res) => {
         await supabase.from('users').update({ company_id: null }).eq('company_id', req.params.id);
 
         // Clean up tickets in Supabase
-        await supabase.from('tickets').update({ company_id: null }).eq('company_id', req.params.id);
+        // await supabase.from('tickets').update({ company_id: null }).eq('company_id', req.params.id); // tickets table doesn't have company_id in Supabase
 
         const { error } = await supabase.from('companies').delete().eq('id', req.params.id);
         if (error) throw error;

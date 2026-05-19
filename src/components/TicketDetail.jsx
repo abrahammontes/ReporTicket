@@ -310,7 +310,7 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
                 fontWeight: '800',
                 marginTop: '0.25rem'
               }}>#{localTicket.id}</span>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: '800', lineHeight: '1.2' }}>{localTicket.subject}</h2>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: '800', lineHeight: '1.2' }}>{localTicket.title || localTicket.subject}</h2>
             </div>
             
             <p style={{ color: 'var(--text-main)', lineHeight: '1.7', fontSize: '1rem' }}>

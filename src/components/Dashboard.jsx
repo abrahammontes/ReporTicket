@@ -166,7 +166,7 @@ const Dashboard = ({ stats, t, tickets = [], onSelectTicket }) => {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
                     <p style={{ fontWeight: '700', fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {ticket.subject}
+                      {ticket.title || ticket.subject}
                     </p>
                     <span className={`badge badge-${(ticket.status || 'new').replace(/\s+/g, '')}`}>
                       {t(ticket.status || 'new')}

@@ -237,8 +237,13 @@ const Profile = ({ user, t, onUpdate }) => {
                 style={{ flex: 1 }}
               />
             </div>
-            <p style={{ marginTop: '0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              * {t('whatsappRequiredAlert')}
+            <p style={{ 
+              marginTop: '0.4rem', 
+              fontSize: '0.75rem', 
+              color: phone.trim() ? 'var(--text-muted)' : '#f59e0b',
+              transition: 'color 0.2s ease-in-out'
+            }}>
+              * {phone.trim() ? t('whatsappHelperText') : t('whatsappRequiredAlert')}
             </p>
           </div>
 
