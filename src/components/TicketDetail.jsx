@@ -118,6 +118,9 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
      try {
        const result = await dbService.updateTicket(localTicket.id, pendingUpdates);
        if (result.success) {
+         if (result.whatsappUrl && userRole !== 'customer') {
+           window.open(result.whatsappUrl, '_blank');
+         }
          setLocalTicket(prev => ({ ...prev, ...pendingUpdates }));
          setPendingUpdates({});
          setShowSuccess(true);
@@ -187,6 +190,9 @@ const TicketDetail = ({ ticket, onBack, t, onUpdate, userRole, user }) => {
          notes: [...notes, noteData]
        });
        if (result.success) {
+         if (result.whatsappUrl && userRole !== 'customer') {
+           window.open(result.whatsappUrl, '_blank');
+         }
          setLocalTicket(prev => ({
            ...prev,
            notes: [...(prev.notes || []), noteData]

@@ -192,12 +192,19 @@ const sendWhatsAppNotification = async (userId, message) => {
     console.log(`\n\x1b[32m==================================================\x1b[0m`);
     console.log(`\x1b[36m[WHATSAPP MOCK SIMULATION] \x1b[32mTo: ${name} (${phone || '\x1b[31mNO CONFIGURADO\x1b[32m'})\x1b[0m`);
     console.log(`\x1b[33mMessage: ${message}\x1b[0m`);
+    
+    let waUrl = null;
     if (!phone) {
         console.log(`\x1b[31m[ADVERTENCIA] No se pudo enviar el WhatsApp porque el usuario no tiene un número telefónico configurado.\x1b[0m`);
     } else {
-        console.log(`\x1b[32m[ESTADO] Enviado con éxito a través de la API simulada de WhatsApp.\x1b[0m`);
+        console.log(`\x1b[32m[ESTADO] Se generó el enlace a wa.me correctamente.\x1b[0m`);
+        const cleanPhone = phone.replace(/\D/g, '');
+        const encodedMessage = encodeURIComponent(message);
+        waUrl = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
     }
     console.log(`\x1b[32m==================================================\n\x1b[0m`);
+    
+    return waUrl;
 };
 
 // --- LOCAL JSON DATABASE PERSISTENCE ---
@@ -874,11 +881,12 @@ app.patch('/api/tickets/:id', async (req, res) => {
                 }
             }
 
+            let whatsappUrl = null;
             if (notifMessage && creatorUserId) {
-                sendWhatsAppNotification(creatorUserId, notifMessage);
+                whatsappUrl = await sendWhatsAppNotification(creatorUserId, notifMessage);
             }
 
-            return res.json({ success: true, message: 'Ticket updated successfully' });
+            return res.json({ success: true, message: 'Ticket updated successfully', whatsappUrl });
         } catch (e) {
             return res.status(500).json({ success: false, message: e.message });
         }
@@ -964,11 +972,12 @@ app.patch('/api/tickets/:id', async (req, res) => {
             }
         }
 
+        let whatsappUrl = null;
         if (notifMessage && creatorUserId) {
-            sendWhatsAppNotification(creatorUserId, notifMessage);
+            whatsappUrl = await sendWhatsAppNotification(creatorUserId, notifMessage);
         }
 
-        res.json({ success: true, message: 'Ticket updated successfully' });
+        res.json({ success: true, message: 'Ticket updated successfully', whatsappUrl });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
