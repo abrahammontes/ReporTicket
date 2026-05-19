@@ -4,7 +4,7 @@ import fs from 'fs';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
@@ -227,55 +227,59 @@ const writeJson = (file, data) => {
 };
 
 const initLocalDb = () => {
-    const dataDir = path.join(__dirname, 'data');
-    if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-    }
-    const uploadsDir = path.join(__dirname, 'public', 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-    }
+    try {
+        const dataDir = path.join(__dirname, 'data');
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+        const uploadsDir = path.join(__dirname, 'public', 'uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
 
-    if (!fs.existsSync(COMPANIES_FILE)) {
-        const defaultCompanies = [
-            {
-                id: 'comp-1',
-                name: 'ReporTicket Demo',
-                status: 'active',
-                created_at: new Date().toISOString()
-            }
-        ];
-        writeJson(COMPANIES_FILE, defaultCompanies);
-    }
+        if (!fs.existsSync(COMPANIES_FILE)) {
+            const defaultCompanies = [
+                {
+                    id: 'comp-1',
+                    name: 'ReporTicket Demo',
+                    status: 'active',
+                    created_at: new Date().toISOString()
+                }
+            ];
+            writeJson(COMPANIES_FILE, defaultCompanies);
+        }
 
-    if (!fs.existsSync(USERS_FILE)) {
-        const defaultUsers = [
-            {
-                id: 'user-master',
-                name: 'Agente Administrador Super Administrador',
-                email: 'abraham.montes@gmail.com',
-                password: '$2b$10$rhBuiWFekrbkLd2KMcwBSOF5iN77a1uw9ZtU0F7FcVODNRW3rsH.e', // admin123
-                role: 'superadmin',
-                permissions: {
-                    view_all_tickets: true,
-                    assign_tickets: true,
-                    manage_users: true,
-                    manage_companies: true
-                },
-                company_id: null,
-                status: 'active',
-                created_at: new Date().toISOString()
-            }
-        ];
-        writeJson(USERS_FILE, defaultUsers);
-    }
+        if (!fs.existsSync(USERS_FILE)) {
+            const defaultUsers = [
+                {
+                    id: 'user-master',
+                    name: 'Agente Administrador Super Administrador',
+                    email: 'abraham.montes@gmail.com',
+                    password: '$2b$10$rhBuiWFekrbkLd2KMcwBSOF5iN77a1uw9ZtU0F7FcVODNRW3rsH.e', // admin123
+                    role: 'superadmin',
+                    permissions: {
+                        view_all_tickets: true,
+                        assign_tickets: true,
+                        manage_users: true,
+                        manage_companies: true
+                    },
+                    company_id: null,
+                    status: 'active',
+                    created_at: new Date().toISOString()
+                }
+            ];
+            writeJson(USERS_FILE, defaultUsers);
+        }
 
-    if (!fs.existsSync(TICKETS_FILE)) {
-        writeJson(TICKETS_FILE, []);
-    }
+        if (!fs.existsSync(TICKETS_FILE)) {
+            writeJson(TICKETS_FILE, []);
+        }
 
-    if (!fs.existsSync(NOTES_FILE)) {
-        writeJson(NOTES_FILE, []);
+        if (!fs.existsSync(NOTES_FILE)) {
+            writeJson(NOTES_FILE, []);
+        }
+    } catch (e) {
+        console.warn('Warning: Local JSON database initialization bypassed (read-only environment):', e.message);
     }
 };
 
@@ -1607,7 +1611,11 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     }
 });
 
-const PORT = 3001;
-app.listen(PORT, () => console.log(`Supabase Connected Server running on http://localhost:${PORT}`));
+if (process.env.VERCEL) {
+    console.log('Vercel serverless environment detected. express listener bypassed.');
+} else {
+    const PORT = 3001;
+    app.listen(PORT, () => console.log(`Supabase Connected Server running on http://localhost:${PORT}`));
+}
 
 export default app;
